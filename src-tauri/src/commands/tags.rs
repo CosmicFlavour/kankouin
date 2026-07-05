@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::commands::tasks;
 use crate::db::AppState;
 use crate::error::{AppError, AppResult};
-use crate::models::{Tag, Task, TaskSummary};
+use crate::models::{Tag, TaskSummary};
 
 fn row_to_tag(row: &rusqlite::Row) -> rusqlite::Result<Tag> {
     Ok(Tag {
@@ -76,26 +76,7 @@ fn tasks_for_tag(conn: &Connection, tag_id: String) -> AppResult<Vec<TaskSummary
          ORDER BY t.created_at ASC",
     )?;
     let tasks = stmt
-        .query_map(params![tag_id], |row| {
-            Ok(Task {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                epic_id: row.get(2)?,
-                user_story_id: row.get(3)?,
-                title: row.get(4)?,
-                description: row.get(5)?,
-                state: row.get(6)?,
-                priority: row.get(7)?,
-                deadline_type: row.get(8)?,
-                exact_date: row.get(9)?,
-                fuzzy_bucket: row.get(10)?,
-                bucket_period: row.get(11)?,
-                state_since: row.get(12)?,
-                archived: row.get::<_, i64>(13)? != 0,
-                created_at: row.get(14)?,
-                updated_at: row.get(15)?,
-            })
-        })?
+        .query_map(params![tag_id], tasks::row_to_task)?
         .collect::<Result<Vec<_>, _>>()?;
     tasks::attach_tags_and_blocked(conn, tasks)
 }

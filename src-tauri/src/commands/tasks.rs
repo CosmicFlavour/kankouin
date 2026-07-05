@@ -35,7 +35,11 @@ fn validate_one_of(field: &str, value: &str, allowed: &[&str]) -> AppResult<()> 
     }
 }
 
-fn row_to_task(row: &rusqlite::Row) -> rusqlite::Result<Task> {
+/// Maps a row selected via `TASK_COLUMNS` (or `TASK_COLUMNS_DEP_ALIASED`, or
+/// any query producing the same plain column names) to a `Task`. Shared
+/// outside this module so other commands querying the `tasks` table (e.g.
+/// [tags.rs](crate::commands::tags)) don't duplicate the field list.
+pub(crate) fn row_to_task(row: &rusqlite::Row) -> rusqlite::Result<Task> {
     Ok(Task {
         id: row.get("id")?,
         project_id: row.get("project_id")?,
