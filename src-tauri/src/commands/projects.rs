@@ -132,7 +132,9 @@ mod tests {
     use crate::db::test_connection;
 
     fn make_workspace(conn: &Connection) -> String {
-        workspaces::create(conn, "WS".into(), None, None).unwrap().id
+        workspaces::create(conn, "WS".into(), None, None)
+            .unwrap()
+            .id
     }
 
     #[test]

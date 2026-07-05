@@ -138,7 +138,14 @@ mod tests {
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].id, ws.id);
 
-        let updated = update(&conn, ws.id.clone(), Some("Personal Life".into()), None, None).unwrap();
+        let updated = update(
+            &conn,
+            ws.id.clone(),
+            Some("Personal Life".into()),
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(updated.name, "Personal Life");
         assert_eq!(updated.color, Some("#ff0000".into()));
 

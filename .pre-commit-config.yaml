@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --manifest-path src-tauri/Cargo.toml --
+        language: system
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        language: system
+        pass_filenames: false
