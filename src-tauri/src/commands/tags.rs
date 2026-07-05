@@ -46,14 +46,23 @@ fn delete(conn: &Connection, id: String) -> AppResult<()> {
     Ok(())
 }
 
-fn replace_task_tags(conn: &Connection, task_id: String, tag_ids: Vec<String>) -> AppResult<()> {
-    conn.execute("DELETE FROM task_tags WHERE task_id = ?1", params![task_id])?;
+fn replace_task_tags(
+    conn: &mut Connection,
+    task_id: String,
+    tag_ids: Vec<String>,
+) -> AppResult<()> {
+    // Delete-then-reinsert must be atomic: a crash partway through would
+    // otherwise leave the task with an empty or partial tag set instead of
+    // either the old or the new one.
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM task_tags WHERE task_id = ?1", params![task_id])?;
     for tag_id in tag_ids {
-        conn.execute(
+        tx.execute(
             "INSERT INTO task_tags (task_id, tag_id) VALUES (?1, ?2)",
             params![task_id, tag_id],
         )?;
     }
+    tx.commit()?;
     Ok(())
 }
 
@@ -120,8 +129,8 @@ pub fn set_task_tags(
     task_id: String,
     tag_ids: Vec<String>,
 ) -> AppResult<()> {
-    let conn = state.conn()?;
-    replace_task_tags(&conn, task_id, tag_ids)
+    let mut conn = state.conn()?;
+    replace_task_tags(&mut conn, task_id, tag_ids)
 }
 
 #[tauri::command]
@@ -169,7 +178,7 @@ mod tests {
 
     #[test]
     fn set_task_tags_replaces_existing_set() {
-        let conn = test_connection();
+        let mut conn = test_connection();
         let project_id = make_project(&conn);
         let workspace_id: String = conn
             .query_row(
@@ -183,11 +192,11 @@ mod tests {
         let tag_a = create(&conn, workspace_id.clone(), "a".into(), "#111111".into()).unwrap();
         let tag_b = create(&conn, workspace_id, "b".into(), "#222222".into()).unwrap();
 
-        replace_task_tags(&conn, task.id.clone(), vec![tag_a.id.clone()]).unwrap();
+        replace_task_tags(&mut conn, task.id.clone(), vec![tag_a.id.clone()]).unwrap();
         let by_a = tasks_for_tag(&conn, tag_a.id.clone()).unwrap();
         assert_eq!(by_a.len(), 1);
 
-        replace_task_tags(&conn, task.id.clone(), vec![tag_b.id.clone()]).unwrap();
+        replace_task_tags(&mut conn, task.id.clone(), vec![tag_b.id.clone()]).unwrap();
         let by_a_after = tasks_for_tag(&conn, tag_a.id).unwrap();
         assert_eq!(by_a_after.len(), 0);
         let by_b = tasks_for_tag(&conn, tag_b.id).unwrap();

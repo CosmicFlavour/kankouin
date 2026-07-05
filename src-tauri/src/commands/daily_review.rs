@@ -48,11 +48,11 @@ mod tests {
 
     #[test]
     fn fresh_doing_task_is_not_stale() {
-        let conn = test_connection();
+        let mut conn = test_connection();
         let project_id = make_project(&conn);
         let task =
             tasks_cmds::create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
-        tasks_cmds::update_state(&conn, task.id.clone(), "doing".into()).unwrap();
+        tasks_cmds::update_state(&mut conn, task.id.clone(), "doing".into()).unwrap();
 
         assert!(tasks::list_stale(&conn, &stale_cutoff())
             .unwrap()
@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn old_doing_and_under_review_tasks_are_stale() {
-        let conn = test_connection();
+        let mut conn = test_connection();
         let project_id = make_project(&conn);
 
         let doing = tasks_cmds::create(
@@ -74,13 +74,13 @@ mod tests {
             None,
         )
         .unwrap();
-        tasks_cmds::update_state(&conn, doing.id.clone(), "doing".into()).unwrap();
+        tasks_cmds::update_state(&mut conn, doing.id.clone(), "doing".into()).unwrap();
         backdate(&conn, &doing.id, 8);
 
         let reviewed =
             tasks_cmds::create(&conn, project_id, "Reviewed".into(), None, None, None, None)
                 .unwrap();
-        tasks_cmds::update_state(&conn, reviewed.id.clone(), "under_review".into()).unwrap();
+        tasks_cmds::update_state(&mut conn, reviewed.id.clone(), "under_review".into()).unwrap();
         backdate(&conn, &reviewed.id, 8);
 
         let stale = tasks::list_stale(&conn, &stale_cutoff()).unwrap();
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn stale_todo_done_and_archived_tasks_are_excluded() {
-        let conn = test_connection();
+        let mut conn = test_connection();
         let project_id = make_project(&conn);
 
         let todo = tasks_cmds::create(
@@ -116,13 +116,13 @@ mod tests {
             None,
         )
         .unwrap();
-        tasks_cmds::update_state(&conn, done.id.clone(), "done".into()).unwrap();
+        tasks_cmds::update_state(&mut conn, done.id.clone(), "done".into()).unwrap();
         backdate(&conn, &done.id, 30);
 
         let archived =
             tasks_cmds::create(&conn, project_id, "Archived".into(), None, None, None, None)
                 .unwrap();
-        tasks_cmds::update_state(&conn, archived.id.clone(), "doing".into()).unwrap();
+        tasks_cmds::update_state(&mut conn, archived.id.clone(), "doing".into()).unwrap();
         backdate(&conn, &archived.id, 30);
         conn.execute(
             "UPDATE tasks SET archived = 1 WHERE id = ?1",

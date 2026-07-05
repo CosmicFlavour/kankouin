@@ -308,7 +308,11 @@ fn update(
     get_task_row(conn, &id)
 }
 
-pub(crate) fn update_state(conn: &Connection, id: String, new_state: String) -> AppResult<Task> {
+pub(crate) fn update_state(
+    conn: &mut Connection,
+    id: String,
+    new_state: String,
+) -> AppResult<Task> {
     let now = Utc::now().to_rfc3339();
     let current_state: String = conn
         .query_row("SELECT state FROM tasks WHERE id = ?1", params![id], |r| {
@@ -320,12 +324,16 @@ pub(crate) fn update_state(conn: &Connection, id: String, new_state: String) -> 
         return get_task_row(conn, &id);
     }
 
-    conn.execute(
+    // The state change and its log entry must land together: a crash between
+    // the two would otherwise silently break the activity-log audit trail.
+    let tx = conn.transaction()?;
+
+    tx.execute(
         "UPDATE tasks SET state = ?2, state_since = ?3, updated_at = ?4 WHERE id = ?1",
         params![id, new_state, now, now],
     )?;
 
-    conn.execute(
+    tx.execute(
         "INSERT INTO task_logs (id, task_id, entry_type, content, created_at)
          VALUES (?1, ?2, 'state_change', ?3, ?4)",
         params![
@@ -335,6 +343,8 @@ pub(crate) fn update_state(conn: &Connection, id: String, new_state: String) -> 
             now
         ],
     )?;
+
+    tx.commit()?;
 
     get_task_row(conn, &id)
 }
@@ -576,8 +586,8 @@ pub fn update_task(
 
 #[tauri::command]
 pub fn update_task_state(state: State<AppState>, id: String, new_state: String) -> AppResult<Task> {
-    let conn = state.conn()?;
-    update_state(&conn, id, new_state)
+    let mut conn = state.conn()?;
+    update_state(&mut conn, id, new_state)
 }
 
 #[tauri::command]
@@ -710,18 +720,18 @@ mod tests {
 
     #[test]
     fn state_transition_stamps_state_since_and_logs() {
-        let conn = test_connection();
+        let mut conn = test_connection();
         let project_id = make_project(&conn);
         let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
         let created_state_since = task.state_since.clone();
 
-        let doing = update_state(&conn, task.id.clone(), "doing".into()).unwrap();
+        let doing = update_state(&mut conn, task.id.clone(), "doing".into()).unwrap();
         assert_ne!(doing.state_since, created_state_since);
 
-        let under_review = update_state(&conn, task.id.clone(), "under_review".into()).unwrap();
+        let under_review = update_state(&mut conn, task.id.clone(), "under_review".into()).unwrap();
         assert_ne!(under_review.state_since, doing.state_since);
 
-        let done = update_state(&conn, task.id.clone(), "done".into()).unwrap();
+        let done = update_state(&mut conn, task.id.clone(), "done".into()).unwrap();
         assert_ne!(done.state_since, under_review.state_since);
 
         let detail = get_detail(&conn, task.id).unwrap();
@@ -768,7 +778,7 @@ mod tests {
 
     #[test]
     fn dependency_blocks_until_resolved() {
-        let conn = test_connection();
+        let mut conn = test_connection();
         let project_id = make_project(&conn);
         let blocker = create(
             &conn,
@@ -803,7 +813,7 @@ mod tests {
         let ready = ready_to_work_on(&conn).unwrap();
         assert!(!ready.iter().any(|s| s.task.id == blocked_task.id));
 
-        update_state(&conn, blocker.id.clone(), "done".into()).unwrap();
+        update_state(&mut conn, blocker.id.clone(), "done".into()).unwrap();
 
         let listed = list(&conn, project_id).unwrap();
         let blocked_summary = listed
@@ -862,5 +872,157 @@ mod tests {
         let ready = ready_to_work_on(&conn).unwrap();
         let titles: Vec<&str> = ready.iter().map(|s| s.task.title.as_str()).collect();
         assert_eq!(titles, vec!["High", "Medium", "Low"]);
+    }
+
+    #[test]
+    fn list_today_includes_overdue_and_this_week_only() {
+        let mut conn = test_connection();
+        let project_id = make_project(&conn);
+
+        let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
+        let overdue_date = (Utc::now() - Duration::days(30))
+            .date_naive()
+            .format("%Y-%m-%d")
+            .to_string();
+        let future_date = (Utc::now() + Duration::days(30))
+            .date_naive()
+            .format("%Y-%m-%d")
+            .to_string();
+
+        let overdue = create(
+            &conn,
+            project_id.clone(),
+            "Overdue".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        apply_deadline(
+            &conn,
+            overdue.id.clone(),
+            "exact".into(),
+            Some(overdue_date),
+            None,
+        )
+        .unwrap();
+
+        let this_week = create(
+            &conn,
+            project_id.clone(),
+            "This week".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        apply_deadline(
+            &conn,
+            this_week.id.clone(),
+            "exact".into(),
+            Some(today.clone()),
+            None,
+        )
+        .unwrap();
+
+        let future = create(
+            &conn,
+            project_id.clone(),
+            "Future".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        apply_deadline(
+            &conn,
+            future.id.clone(),
+            "exact".into(),
+            Some(future_date),
+            None,
+        )
+        .unwrap();
+
+        let done_task = create(
+            &conn,
+            project_id.clone(),
+            "Done".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        apply_deadline(
+            &conn,
+            done_task.id.clone(),
+            "exact".into(),
+            Some(today.clone()),
+            None,
+        )
+        .unwrap();
+        update_state(&mut conn, done_task.id.clone(), "done".into()).unwrap();
+
+        let fuzzy = create(
+            &conn,
+            project_id.clone(),
+            "Fuzzy".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        apply_deadline(
+            &conn,
+            fuzzy.id.clone(),
+            "fuzzy".into(),
+            None,
+            Some("this_week".into()),
+        )
+        .unwrap();
+
+        let archived_task =
+            create(&conn, project_id, "Archived".into(), None, None, None, None).unwrap();
+        apply_deadline(
+            &conn,
+            archived_task.id.clone(),
+            "exact".into(),
+            Some(today),
+            None,
+        )
+        .unwrap();
+        archive(&conn, archived_task.id.clone()).unwrap();
+
+        let today_list = list_today(&conn).unwrap();
+        let ids: Vec<&str> = today_list.iter().map(|s| s.task.id.as_str()).collect();
+
+        assert!(
+            ids.contains(&overdue.id.as_str()),
+            "overdue task should show"
+        );
+        assert!(
+            ids.contains(&this_week.id.as_str()),
+            "this-week task should show"
+        );
+        assert!(
+            !ids.contains(&future.id.as_str()),
+            "future task should be excluded"
+        );
+        assert!(
+            !ids.contains(&done_task.id.as_str()),
+            "done task should be excluded"
+        );
+        assert!(
+            !ids.contains(&fuzzy.id.as_str()),
+            "fuzzy-deadline task should be excluded"
+        );
+        assert!(
+            !ids.contains(&archived_task.id.as_str()),
+            "archived task should be excluded"
+        );
     }
 }
