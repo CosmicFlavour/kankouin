@@ -52,7 +52,7 @@ CREATE TABLE tasks (
     fuzzy_bucket   TEXT CHECK (fuzzy_bucket IN ('this_week','this_month','this_quarter','someday')),
     bucket_period  TEXT,
 
-    under_review_since TEXT,
+    state_since    TEXT NOT NULL,
 
     archived       INTEGER NOT NULL DEFAULT 0,
     created_at     TEXT NOT NULL,
