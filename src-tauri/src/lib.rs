@@ -1,4 +1,5 @@
 mod commands;
+mod dates;
 mod db;
 mod error;
 mod models;
@@ -33,6 +34,33 @@ pub fn run() {
             commands::projects::create_project,
             commands::projects::update_project,
             commands::projects::archive_project,
+            commands::epics::list_epics,
+            commands::epics::create_epic,
+            commands::epics::update_epic,
+            commands::epics::delete_epic,
+            commands::user_stories::list_user_stories,
+            commands::user_stories::create_user_story,
+            commands::user_stories::update_user_story,
+            commands::user_stories::delete_user_story,
+            commands::tags::list_tags,
+            commands::tags::create_tag,
+            commands::tags::delete_tag,
+            commands::tags::set_task_tags,
+            commands::tags::list_tasks_by_tag,
+            commands::tasks::list_tasks,
+            commands::tasks::get_task,
+            commands::tasks::create_task,
+            commands::tasks::update_task,
+            commands::tasks::update_task_state,
+            commands::tasks::set_deadline,
+            commands::tasks::archive_task,
+            commands::tasks::list_tasks_today,
+            commands::tasks::list_ready_to_work_on,
+            commands::tasks::add_subtask,
+            commands::tasks::toggle_subtask,
+            commands::tasks::add_log_entry,
+            commands::tasks::set_dependency,
+            commands::tasks::remove_dependency,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

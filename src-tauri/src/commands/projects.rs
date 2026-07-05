@@ -28,7 +28,7 @@ fn list(conn: &Connection, workspace_id: String) -> AppResult<Vec<Project>> {
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-fn create(
+pub(crate) fn create(
     conn: &Connection,
     workspace_id: String,
     name: String,

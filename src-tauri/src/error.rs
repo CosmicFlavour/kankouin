@@ -14,6 +14,8 @@ pub enum AppError {
     Lock,
     #[error("not found")]
     NotFound,
+    #[error("invalid input: {0}")]
+    Invalid(String),
 }
 
 impl Serialize for AppError {
