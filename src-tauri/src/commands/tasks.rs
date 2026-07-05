@@ -18,6 +18,23 @@ const TASK_COLUMNS_DEP_ALIASED: &str = "dep.id, dep.project_id, dep.epic_id, dep
      dep.fuzzy_bucket, dep.bucket_period, dep.state_since, dep.archived, dep.created_at, \
      dep.updated_at";
 
+const VALID_STATES: [&str; 4] = ["todo", "doing", "under_review", "done"];
+const VALID_PRIORITIES: [&str; 3] = ["low", "medium", "high"];
+const VALID_FUZZY_BUCKETS: [&str; 4] = ["this_week", "this_month", "this_quarter", "someday"];
+
+/// Rejects enum-like string inputs before they reach SQL, so a bad value
+/// from the frontend comes back as a clean `AppError::Invalid` instead of a
+/// raw SQLite `CHECK` constraint violation.
+fn validate_one_of(field: &str, value: &str, allowed: &[&str]) -> AppResult<()> {
+    if allowed.contains(&value) {
+        Ok(())
+    } else {
+        Err(AppError::Invalid(format!(
+            "invalid {field} {value:?}, expected one of {allowed:?}"
+        )))
+    }
+}
+
 fn row_to_task(row: &rusqlite::Row) -> rusqlite::Result<Task> {
     Ok(Task {
         id: row.get("id")?,
@@ -248,6 +265,7 @@ pub(crate) fn create(
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let priority = priority.unwrap_or_else(|| "medium".to_string());
+    validate_one_of("priority", &priority, &VALID_PRIORITIES)?;
     conn.execute(
         "INSERT INTO tasks (id, project_id, epic_id, user_story_id, title, description, state, priority, state_since, archived, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', ?7, ?8, 0, ?8, ?8)",
@@ -282,6 +300,10 @@ fn update(
     epic_id: Option<String>,
     user_story_id: Option<String>,
 ) -> AppResult<Task> {
+    if let Some(ref p) = priority {
+        validate_one_of("priority", p, &VALID_PRIORITIES)?;
+    }
+
     let now = Utc::now().to_rfc3339();
     let changed = conn.execute(
         "UPDATE tasks
@@ -313,6 +335,8 @@ pub(crate) fn update_state(
     id: String,
     new_state: String,
 ) -> AppResult<Task> {
+    validate_one_of("state", &new_state, &VALID_STATES)?;
+
     let now = Utc::now().to_rfc3339();
     let current_state: String = conn
         .query_row("SELECT state FROM tasks WHERE id = ?1", params![id], |r| {
@@ -369,6 +393,7 @@ fn apply_deadline(
             let bucket = fuzzy_bucket.ok_or_else(|| {
                 AppError::Invalid("fuzzy_bucket is required when deadline_type = fuzzy".into())
             })?;
+            validate_one_of("fuzzy_bucket", &bucket, &VALID_FUZZY_BUCKETS)?;
             let period = crate::dates::current_bucket_period(&bucket, Utc::now());
             (None, Some(bucket), period)
         }
@@ -1029,5 +1054,47 @@ mod tests {
             !ids.contains(&archived_task.id.as_str()),
             "archived task should be excluded"
         );
+    }
+
+    #[test]
+    fn rejects_invalid_enum_like_values_before_hitting_sql() {
+        let mut conn = test_connection();
+        let project_id = make_project(&conn);
+
+        let bad_priority = create(
+            &conn,
+            project_id.clone(),
+            "T".into(),
+            None,
+            None,
+            None,
+            Some("urgent".into()),
+        );
+        assert!(matches!(bad_priority, Err(AppError::Invalid(_))));
+
+        let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+
+        let bad_update_priority = update(
+            &conn,
+            task.id.clone(),
+            None,
+            None,
+            Some("urgent".into()),
+            None,
+            None,
+        );
+        assert!(matches!(bad_update_priority, Err(AppError::Invalid(_))));
+
+        let bad_state = update_state(&mut conn, task.id.clone(), "in_progress".into());
+        assert!(matches!(bad_state, Err(AppError::Invalid(_))));
+
+        let bad_bucket = apply_deadline(
+            &conn,
+            task.id,
+            "fuzzy".into(),
+            None,
+            Some("next_week".into()),
+        );
+        assert!(matches!(bad_bucket, Err(AppError::Invalid(_))));
     }
 }
