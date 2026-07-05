@@ -520,6 +520,11 @@ fn insert_dependency(conn: &Connection, task_id: String, depends_on_id: String) 
     Ok(())
 }
 
+// Deliberately doesn't error on a missing row, unlike every other delete in
+// this codebase: a "blocked by" link is a soft, togglable relationship,
+// so removing one reads as "ensure it doesn't exist" rather than "delete
+// this specific record" — same idempotent spirit as `insert_dependency`'s
+// `INSERT OR IGNORE`.
 fn delete_dependency(conn: &Connection, task_id: String, depends_on_id: String) -> AppResult<()> {
     conn.execute(
         "DELETE FROM task_dependencies WHERE task_id = ?1 AND depends_on_id = ?2",
