@@ -89,7 +89,7 @@ fn delete(conn: &Connection, id: String) -> AppResult<()> {
 
 #[tauri::command]
 pub fn list_workspaces(state: State<AppState>) -> AppResult<Vec<Workspace>> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.conn()?;
     list(&conn)
 }
 
@@ -100,7 +100,7 @@ pub fn create_workspace(
     color: Option<String>,
     icon: Option<String>,
 ) -> AppResult<Workspace> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.conn()?;
     create(&conn, name, color, icon)
 }
 
@@ -112,13 +112,13 @@ pub fn update_workspace(
     color: Option<String>,
     icon: Option<String>,
 ) -> AppResult<Workspace> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.conn()?;
     update(&conn, id, name, color, icon)
 }
 
 #[tauri::command]
 pub fn delete_workspace(state: State<AppState>, id: String) -> AppResult<()> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.conn()?;
     delete(&conn, id)
 }
 

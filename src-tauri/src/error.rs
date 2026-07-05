@@ -6,6 +6,12 @@ pub enum AppError {
     Db(#[from] rusqlite::Error),
     #[error("migration error: {0}")]
     Migration(#[from] rusqlite_migration::Error),
+    #[error("filesystem error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("tauri error: {0}")]
+    Tauri(#[from] tauri::Error),
+    #[error("internal error: database lock poisoned")]
+    Lock,
     #[error("not found")]
     NotFound,
 }

@@ -93,7 +93,7 @@ fn archive(conn: &Connection, id: String) -> AppResult<()> {
 
 #[tauri::command]
 pub fn list_projects(state: State<AppState>, workspace_id: String) -> AppResult<Vec<Project>> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.conn()?;
     list(&conn, workspace_id)
 }
 
@@ -104,7 +104,7 @@ pub fn create_project(
     name: String,
     description: Option<String>,
 ) -> AppResult<Project> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.conn()?;
     create(&conn, workspace_id, name, description)
 }
 
@@ -115,13 +115,13 @@ pub fn update_project(
     name: Option<String>,
     description: Option<String>,
 ) -> AppResult<Project> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.conn()?;
     update(&conn, id, name, description)
 }
 
 #[tauri::command]
 pub fn archive_project(state: State<AppState>, id: String) -> AppResult<()> {
-    let conn = state.db.lock().unwrap();
+    let conn = state.conn()?;
     archive(&conn, id)
 }
 

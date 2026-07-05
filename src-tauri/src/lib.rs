@@ -17,7 +17,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let conn = db::init_db(app.handle());
+            let conn = db::init_db(app.handle())?;
             app.manage(AppState {
                 db: Mutex::new(conn),
             });
