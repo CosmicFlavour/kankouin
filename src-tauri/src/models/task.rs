@@ -16,7 +16,7 @@ pub struct Task {
     pub exact_date: Option<String>,
     pub fuzzy_bucket: Option<String>,
     pub bucket_period: Option<String>,
-    pub under_review_since: Option<String>,
+    pub state_since: String,
     pub archived: bool,
     pub created_at: String,
     pub updated_at: String,

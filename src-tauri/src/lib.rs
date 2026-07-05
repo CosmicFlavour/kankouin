@@ -61,6 +61,7 @@ pub fn run() {
             commands::tasks::add_log_entry,
             commands::tasks::set_dependency,
             commands::tasks::remove_dependency,
+            commands::daily_review::get_stale_tasks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

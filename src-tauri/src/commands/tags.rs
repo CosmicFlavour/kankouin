@@ -61,7 +61,7 @@ fn tasks_for_tag(conn: &Connection, tag_id: String) -> AppResult<Vec<TaskSummary
     let mut stmt = conn.prepare(
         "SELECT t.id, t.project_id, t.epic_id, t.user_story_id, t.title, t.description, t.state,
                 t.priority, t.deadline_type, t.exact_date, t.fuzzy_bucket, t.bucket_period,
-                t.under_review_since, t.archived, t.created_at, t.updated_at
+                t.state_since, t.archived, t.created_at, t.updated_at
          FROM tasks t JOIN task_tags tt ON tt.task_id = t.id
          WHERE tt.tag_id = ?1 AND t.archived = 0
          ORDER BY t.created_at ASC",
@@ -81,7 +81,7 @@ fn tasks_for_tag(conn: &Connection, tag_id: String) -> AppResult<Vec<TaskSummary
                 exact_date: row.get(9)?,
                 fuzzy_bucket: row.get(10)?,
                 bucket_period: row.get(11)?,
-                under_review_since: row.get(12)?,
+                state_since: row.get(12)?,
                 archived: row.get::<_, i64>(13)? != 0,
                 created_at: row.get(14)?,
                 updated_at: row.get(15)?,

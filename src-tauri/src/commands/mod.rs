@@ -1,3 +1,4 @@
+pub mod daily_review;
 pub mod epics;
 pub mod projects;
 pub mod tags;

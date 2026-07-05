@@ -10,12 +10,12 @@ use crate::error::{AppError, AppResult};
 use crate::models::{Subtask, Tag, Task, TaskDetail, TaskLogEntry, TaskSummary};
 
 const TASK_COLUMNS: &str = "id, project_id, epic_id, user_story_id, title, description, state, \
-     priority, deadline_type, exact_date, fuzzy_bucket, bucket_period, under_review_since, \
+     priority, deadline_type, exact_date, fuzzy_bucket, bucket_period, state_since, \
      archived, created_at, updated_at";
 
 const TASK_COLUMNS_DEP_ALIASED: &str = "dep.id, dep.project_id, dep.epic_id, dep.user_story_id, \
      dep.title, dep.description, dep.state, dep.priority, dep.deadline_type, dep.exact_date, \
-     dep.fuzzy_bucket, dep.bucket_period, dep.under_review_since, dep.archived, dep.created_at, \
+     dep.fuzzy_bucket, dep.bucket_period, dep.state_since, dep.archived, dep.created_at, \
      dep.updated_at";
 
 fn row_to_task(row: &rusqlite::Row) -> rusqlite::Result<Task> {
@@ -32,7 +32,7 @@ fn row_to_task(row: &rusqlite::Row) -> rusqlite::Result<Task> {
         exact_date: row.get("exact_date")?,
         fuzzy_bucket: row.get("fuzzy_bucket")?,
         bucket_period: row.get("bucket_period")?,
-        under_review_since: row.get("under_review_since")?,
+        state_since: row.get("state_since")?,
         archived: row.get::<_, i64>("archived")? != 0,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
@@ -174,6 +174,22 @@ fn list(conn: &Connection, project_id: String) -> AppResult<Vec<TaskSummary>> {
     attach_tags_and_blocked(conn, tasks)
 }
 
+/// Tasks in `doing` or `under_review` whose current state started at or
+/// before `cutoff_rfc3339` — the query behind Daily Review's stale-task
+/// list ([daily_review.rs](crate::commands::daily_review)).
+pub(crate) fn list_stale(conn: &Connection, cutoff_rfc3339: &str) -> AppResult<Vec<TaskSummary>> {
+    let sql = format!(
+        "SELECT {TASK_COLUMNS} FROM tasks
+         WHERE state IN ('doing', 'under_review') AND state_since <= ?1 AND archived = 0
+         ORDER BY state_since ASC"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let tasks = stmt
+        .query_map(params![cutoff_rfc3339], row_to_task)?
+        .collect::<Result<Vec<_>, _>>()?;
+    attach_tags_and_blocked(conn, tasks)
+}
+
 fn get_detail(conn: &Connection, id: String) -> AppResult<TaskDetail> {
     let task = get_task_row(conn, &id)?;
 
@@ -233,8 +249,8 @@ pub(crate) fn create(
     let now = Utc::now().to_rfc3339();
     let priority = priority.unwrap_or_else(|| "medium".to_string());
     conn.execute(
-        "INSERT INTO tasks (id, project_id, epic_id, user_story_id, title, description, state, priority, archived, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', ?7, 0, ?8, ?8)",
+        "INSERT INTO tasks (id, project_id, epic_id, user_story_id, title, description, state, priority, state_since, archived, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', ?7, ?8, 0, ?8, ?8)",
         params![id, project_id, epic_id, user_story_id, title, description, priority, now],
     )?;
     Ok(Task {
@@ -250,7 +266,7 @@ pub(crate) fn create(
         exact_date: None,
         fuzzy_bucket: None,
         bucket_period: None,
-        under_review_since: None,
+        state_since: now.clone(),
         archived: false,
         created_at: now.clone(),
         updated_at: now,
@@ -292,7 +308,7 @@ fn update(
     get_task_row(conn, &id)
 }
 
-fn update_state(conn: &Connection, id: String, new_state: String) -> AppResult<Task> {
+pub(crate) fn update_state(conn: &Connection, id: String, new_state: String) -> AppResult<Task> {
     let now = Utc::now().to_rfc3339();
     let current_state: String = conn
         .query_row("SELECT state FROM tasks WHERE id = ?1", params![id], |r| {
@@ -304,11 +320,9 @@ fn update_state(conn: &Connection, id: String, new_state: String) -> AppResult<T
         return get_task_row(conn, &id);
     }
 
-    let under_review_since = (new_state == "under_review").then(|| now.clone());
-
     conn.execute(
-        "UPDATE tasks SET state = ?2, under_review_since = ?3, updated_at = ?4 WHERE id = ?1",
-        params![id, new_state, under_review_since, now],
+        "UPDATE tasks SET state = ?2, state_since = ?3, updated_at = ?4 WHERE id = ?1",
+        params![id, new_state, now, now],
     )?;
 
     conn.execute(
@@ -695,19 +709,20 @@ mod tests {
     }
 
     #[test]
-    fn state_transition_stamps_and_clears_under_review_and_logs() {
+    fn state_transition_stamps_state_since_and_logs() {
         let conn = test_connection();
         let project_id = make_project(&conn);
         let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        let created_state_since = task.state_since.clone();
 
         let doing = update_state(&conn, task.id.clone(), "doing".into()).unwrap();
-        assert_eq!(doing.under_review_since, None);
+        assert_ne!(doing.state_since, created_state_since);
 
         let under_review = update_state(&conn, task.id.clone(), "under_review".into()).unwrap();
-        assert!(under_review.under_review_since.is_some());
+        assert_ne!(under_review.state_since, doing.state_since);
 
         let done = update_state(&conn, task.id.clone(), "done".into()).unwrap();
-        assert_eq!(done.under_review_since, None);
+        assert_ne!(done.state_since, under_review.state_since);
 
         let detail = get_detail(&conn, task.id).unwrap();
         let state_changes = detail

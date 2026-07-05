@@ -19,7 +19,10 @@ impl AppState {
 }
 
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(include_str!("../../migrations/0001_init.sql"))])
+    Migrations::new(vec![
+        M::up(include_str!("../../migrations/0001_init.sql")),
+        M::up(include_str!("../../migrations/0002_state_since.sql")),
+    ])
 }
 
 pub fn init_db(app_handle: &AppHandle) -> AppResult<Connection> {
