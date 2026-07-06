@@ -16,6 +16,8 @@ pub enum AppError {
     NotFound,
     #[error("invalid input: {0}")]
     Invalid(String),
+    #[error("decryption failed: wrong passphrase or corrupted file")]
+    Decrypt,
 }
 
 impl Serialize for AppError {

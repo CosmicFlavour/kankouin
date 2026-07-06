@@ -1,7 +1,7 @@
-mod commands;
+pub mod commands;
 mod dates;
-mod db;
-mod error;
+pub mod db;
+pub mod error;
 mod models;
 
 use db::AppState;
