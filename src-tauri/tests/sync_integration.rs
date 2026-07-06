@@ -12,7 +12,6 @@ const WORKSPACE_INSERT: &str = "INSERT INTO workspaces (id, name, created_at, up
      VALUES ('ws1', 'Personal', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')";
 
 #[test]
-#[ignore = "sync.rs not implemented yet"]
 fn export_then_import_round_trips_data() {
     let dir = tempfile::tempdir().unwrap();
     let source_db = dir.path().join("source.sqlite3");
@@ -47,7 +46,6 @@ fn export_then_import_round_trips_data() {
 }
 
 #[test]
-#[ignore = "sync.rs not implemented yet"]
 fn export_checkpoints_wal_before_reading_file() {
     let dir = tempfile::tempdir().unwrap();
     let source_db = dir.path().join("source.sqlite3");
@@ -72,7 +70,6 @@ fn export_checkpoints_wal_before_reading_file() {
 }
 
 #[test]
-#[ignore = "sync.rs not implemented yet"]
 fn wrong_passphrase_leaves_local_file_untouched() {
     let dir = tempfile::tempdir().unwrap();
     let source_db = dir.path().join("source.sqlite3");
@@ -109,7 +106,6 @@ fn wrong_passphrase_leaves_local_file_untouched() {
 }
 
 #[test]
-#[ignore = "sync.rs not implemented yet"]
 fn corrupted_export_file_is_rejected_cleanly() {
     let dir = tempfile::tempdir().unwrap();
     let target_db = dir.path().join("target.sqlite3");
