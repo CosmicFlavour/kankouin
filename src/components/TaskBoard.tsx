@@ -94,7 +94,7 @@ function TaskColumn({
 }
 
 export function TaskBoard({ projectId }: TaskBoardProps) {
-  const { tasks, loading, error, createTask, moveTask, updateTask } =
+  const { tasks, loading, error, createTask, moveTask, updateTask, setDeadline } =
     useTasks(projectId);
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -183,6 +183,9 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
               }
               onChangeDescription={(description) =>
                 updateTask(selectedTask.id, { description })
+              }
+              onChangeDeadline={(deadlineType, value) =>
+                setDeadline(selectedTask.id, deadlineType, value)
               }
             />
           )}

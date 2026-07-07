@@ -107,5 +107,29 @@ export function useTasks(projectId: string | null) {
     );
   }
 
-  return { tasks, loading, error, createTask, moveTask, updateTask };
+  async function setDeadline(
+    taskId: string,
+    deadlineType: "exact" | "fuzzy",
+    value: string,
+  ) {
+    const updated = await invoke<Task>("set_deadline", {
+      id: taskId,
+      deadlineType,
+      exactDate: deadlineType === "exact" ? value : null,
+      fuzzyBucket: deadlineType === "fuzzy" ? value : null,
+    });
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
+    );
+  }
+
+  return {
+    tasks,
+    loading,
+    error,
+    createTask,
+    moveTask,
+    updateTask,
+    setDeadline,
+  };
 }

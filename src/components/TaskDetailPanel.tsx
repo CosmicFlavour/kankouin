@@ -6,12 +6,23 @@ import { Textarea } from "@/components/ui/textarea";
 
 const PRIORITIES = ["low", "medium", "high"];
 
+const FUZZY_BUCKETS: { value: string; label: string }[] = [
+  { value: "this_week", label: "This Week" },
+  { value: "this_month", label: "This Month" },
+  { value: "this_quarter", label: "This Quarter" },
+  { value: "someday", label: "Someday" },
+];
+
 interface TaskDetailPanelProps {
   task: TaskSummary;
   onClose: () => void;
   onChangeTitle: (title: string) => Promise<void>;
   onChangePriority: (priority: string) => Promise<void>;
   onChangeDescription: (description: string) => Promise<void>;
+  onChangeDeadline: (
+    deadlineType: "exact" | "fuzzy",
+    value: string,
+  ) => Promise<void>;
 }
 
 export function TaskDetailPanel({
@@ -20,6 +31,7 @@ export function TaskDetailPanel({
   onChangeTitle,
   onChangePriority,
   onChangeDescription,
+  onChangeDeadline,
 }: TaskDetailPanelProps) {
   const [titleDraft, setTitleDraft] = useState(task.title);
   const [titleError, setTitleError] = useState<string | null>(null);
@@ -30,6 +42,15 @@ export function TaskDetailPanel({
   const [descriptionError, setDescriptionError] = useState<string | null>(
     null,
   );
+  const [deadlineType, setDeadlineType] = useState<"exact" | "fuzzy">(
+    task.deadline_type === "fuzzy" ? "fuzzy" : "exact",
+  );
+  const [deadlineValue, setDeadlineValue] = useState(
+    task.deadline_type === "fuzzy"
+      ? (task.fuzzy_bucket ?? FUZZY_BUCKETS[0].value)
+      : (task.exact_date ?? ""),
+  );
+  const [deadlineError, setDeadlineError] = useState<string | null>(null);
 
   async function handleSaveTitle(e: React.FormEvent) {
     e.preventDefault();
@@ -58,6 +79,23 @@ export function TaskDetailPanel({
       setDescriptionError(null);
     } catch (err) {
       setDescriptionError(String(err));
+    }
+  }
+
+  function handleDeadlineTypeChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const nextType = e.target.value as "exact" | "fuzzy";
+    setDeadlineType(nextType);
+    setDeadlineValue(nextType === "fuzzy" ? FUZZY_BUCKETS[0].value : "");
+  }
+
+  async function handleSaveDeadline(e: React.FormEvent) {
+    e.preventDefault();
+    if (!deadlineValue) return;
+    try {
+      await onChangeDeadline(deadlineType, deadlineValue);
+      setDeadlineError(null);
+    } catch (err) {
+      setDeadlineError(String(err));
     }
   }
 
@@ -126,6 +164,46 @@ export function TaskDetailPanel({
               </Button>
               {descriptionError && (
                 <p className="text-sm text-destructive">{descriptionError}</p>
+              )}
+            </form>
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Deadline</dt>
+          <dd>
+            <form onSubmit={handleSaveDeadline} className="mt-1 flex flex-col gap-2">
+              <select
+                value={deadlineType}
+                onChange={handleDeadlineTypeChange}
+                className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+              >
+                <option value="exact">Exact date</option>
+                <option value="fuzzy">Fuzzy</option>
+              </select>
+              {deadlineType === "exact" ? (
+                <Input
+                  type="date"
+                  value={deadlineValue}
+                  onChange={(e) => setDeadlineValue(e.target.value)}
+                />
+              ) : (
+                <select
+                  value={deadlineValue}
+                  onChange={(e) => setDeadlineValue(e.target.value)}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                >
+                  {FUZZY_BUCKETS.map((bucket) => (
+                    <option key={bucket.value} value={bucket.value}>
+                      {bucket.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button type="submit" size="sm" variant="outline">
+                Save deadline
+              </Button>
+              {deadlineError && (
+                <p className="text-sm text-destructive">{deadlineError}</p>
               )}
             </form>
           </dd>
