@@ -12,6 +12,7 @@ import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 
 interface TaskBoardProps {
   projectId: string;
@@ -24,7 +25,13 @@ const COLUMNS: { state: TaskSummary["state"]; label: string }[] = [
   { state: "done", label: "Done" },
 ];
 
-function TaskCard({ task }: { task: TaskSummary }) {
+function TaskCard({
+  task,
+  onSelect,
+}: {
+  task: TaskSummary;
+  onSelect: () => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: task.id });
 
@@ -33,6 +40,7 @@ function TaskCard({ task }: { task: TaskSummary }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      onClick={onSelect}
       style={
         transform
           ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
@@ -52,10 +60,12 @@ function TaskColumn({
   state,
   label,
   tasks,
+  onSelectTask,
 }: {
   state: string;
   label: string;
   tasks: TaskSummary[];
+  onSelectTask: (taskId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: state });
 
@@ -72,7 +82,11 @@ function TaskColumn({
       </h3>
       <div className="flex flex-col gap-1">
         {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} />
+          <TaskCard
+            key={task.id}
+            task={task}
+            onSelect={() => onSelectTask(task.id)}
+          />
         ))}
       </div>
     </div>
@@ -84,6 +98,9 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -139,18 +156,28 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
       {moveError && <p className="text-sm text-destructive">{moveError}</p>}
 
       {!loading && !error && (
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="flex gap-4">
-            {COLUMNS.map((column) => (
-              <TaskColumn
-                key={column.state}
-                state={column.state}
-                label={column.label}
-                tasks={tasks.filter((t) => t.state === column.state)}
-              />
-            ))}
-          </div>
-        </DndContext>
+        <div className="flex gap-4">
+          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+            <div className="flex gap-4">
+              {COLUMNS.map((column) => (
+                <TaskColumn
+                  key={column.state}
+                  state={column.state}
+                  label={column.label}
+                  tasks={tasks.filter((t) => t.state === column.state)}
+                  onSelectTask={setSelectedTaskId}
+                />
+              ))}
+            </div>
+          </DndContext>
+
+          {selectedTask && (
+            <TaskDetailPanel
+              task={selectedTask}
+              onClose={() => setSelectedTaskId(null)}
+            />
+          )}
+        </div>
       )}
     </div>
   );
