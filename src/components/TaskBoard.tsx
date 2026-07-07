@@ -1,7 +1,17 @@
 import { useState } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 interface TaskBoardProps {
   projectId: string;
@@ -14,10 +24,70 @@ const COLUMNS: { state: TaskSummary["state"]; label: string }[] = [
   { state: "done", label: "Done" },
 ];
 
+function TaskCard({ task }: { task: TaskSummary }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: task.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={
+        transform
+          ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+          : undefined
+      }
+      className={cn(
+        "cursor-grab rounded-md border border-border bg-background px-3 py-2 text-sm active:cursor-grabbing",
+        isDragging && "opacity-50",
+      )}
+    >
+      {task.title}
+    </div>
+  );
+}
+
+function TaskColumn({
+  state,
+  label,
+  tasks,
+}: {
+  state: string;
+  label: string;
+  tasks: TaskSummary[];
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: state });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex w-56 shrink-0 flex-col gap-2 rounded-md p-2",
+        isOver && "bg-muted",
+      )}
+    >
+      <h3 className="text-sm font-medium text-muted-foreground">
+        {label} ({tasks.length})
+      </h3>
+      <div className="flex flex-col gap-1">
+        {tasks.map((task) => (
+          <TaskCard key={task.id} task={task} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function TaskBoard({ projectId }: TaskBoardProps) {
-  const { tasks, loading, error, createTask } = useTasks(projectId);
+  const { tasks, loading, error, createTask, moveTask } = useTasks(projectId);
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -28,6 +98,23 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
       setCreateError(null);
     } catch (err) {
       setCreateError(String(err));
+    }
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+
+    const taskId = String(active.id);
+    const newState = String(over.id);
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task || task.state === newState) return;
+
+    try {
+      await moveTask(taskId, newState);
+      setMoveError(null);
+    } catch (err) {
+      setMoveError(String(err));
     }
   }
 
@@ -49,30 +136,21 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
           Couldn't load tasks: {error}
         </p>
       )}
+      {moveError && <p className="text-sm text-destructive">{moveError}</p>}
 
       {!loading && !error && (
-        <div className="flex gap-4">
-          {COLUMNS.map((column) => {
-            const columnTasks = tasks.filter((t) => t.state === column.state);
-            return (
-              <div key={column.state} className="flex w-56 shrink-0 flex-col gap-2">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  {column.label} ({columnTasks.length})
-                </h3>
-                <div className="flex flex-col gap-1">
-                  {columnTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="rounded-md border border-border px-3 py-2 text-sm"
-                    >
-                      {task.title}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <div className="flex gap-4">
+            {COLUMNS.map((column) => (
+              <TaskColumn
+                key={column.state}
+                state={column.state}
+                label={column.label}
+                tasks={tasks.filter((t) => t.state === column.state)}
+              />
+            ))}
+          </div>
+        </DndContext>
       )}
     </div>
   );

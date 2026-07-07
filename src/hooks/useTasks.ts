@@ -78,5 +78,17 @@ export function useTasks(projectId: string | null) {
     setTasks((prev) => [...prev, { ...created, tags: [], blocked: false }]);
   }
 
-  return { tasks, loading, error, createTask };
+  async function moveTask(taskId: string, newState: string) {
+    const updated = await invoke<Task>("update_task_state", {
+      id: taskId,
+      newState,
+    });
+    // The command returns a plain Task (no tags/blocked), so merge it into
+    // the existing summary rather than replacing it wholesale.
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
+    );
+  }
+
+  return { tasks, loading, error, createTask, moveTask };
 }
