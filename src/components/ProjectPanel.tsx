@@ -4,7 +4,7 @@ import type { Workspace } from "@/hooks/useWorkspaces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { TaskList } from "@/components/TaskList";
+import { TaskBoard } from "@/components/TaskBoard";
 
 interface ProjectPanelProps {
   workspace: Workspace;
@@ -74,7 +74,7 @@ export function ProjectPanel({
         {createError && <p className="text-sm text-destructive">{createError}</p>}
       </form>
 
-      {selectedProject && <TaskList projectId={selectedProject.id} />}
+      {selectedProject && <TaskBoard projectId={selectedProject.id} />}
     </div>
   );
 }
