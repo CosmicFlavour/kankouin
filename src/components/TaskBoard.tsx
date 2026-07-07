@@ -94,7 +94,8 @@ function TaskColumn({
 }
 
 export function TaskBoard({ projectId }: TaskBoardProps) {
-  const { tasks, loading, error, createTask, moveTask } = useTasks(projectId);
+  const { tasks, loading, error, createTask, moveTask, updateTask } =
+    useTasks(projectId);
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -175,6 +176,9 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
             <TaskDetailPanel
               task={selectedTask}
               onClose={() => setSelectedTaskId(null)}
+              onChangePriority={(priority) =>
+                updateTask(selectedTask.id, { priority })
+              }
             />
           )}
         </div>

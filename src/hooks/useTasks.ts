@@ -90,5 +90,22 @@ export function useTasks(projectId: string | null) {
     );
   }
 
-  return { tasks, loading, error, createTask, moveTask };
+  async function updateTask(
+    taskId: string,
+    fields: { title?: string; description?: string; priority?: string },
+  ) {
+    const updated = await invoke<Task>("update_task", {
+      id: taskId,
+      title: fields.title ?? null,
+      description: fields.description ?? null,
+      priority: fields.priority ?? null,
+      epicId: null,
+      userStoryId: null,
+    });
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
+    );
+  }
+
+  return { tasks, loading, error, createTask, moveTask, updateTask };
 }
