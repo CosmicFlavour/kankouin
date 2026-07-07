@@ -3,6 +3,7 @@ import type { Workspace } from "@/hooks/useWorkspaces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { SyncPanel } from "@/components/SyncPanel";
 
 interface WorkspaceSidebarProps {
   workspaces: Workspace[];
@@ -77,6 +78,8 @@ export function WorkspaceSidebar({
         <Button type="submit">Create workspace</Button>
         {createError && <p className="text-sm text-destructive">{createError}</p>}
       </form>
+
+      <SyncPanel />
     </aside>
   );
 }
