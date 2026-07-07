@@ -177,6 +177,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
               key={selectedTask.id}
               task={selectedTask}
               onClose={() => setSelectedTaskId(null)}
+              onChangeTitle={(title) => updateTask(selectedTask.id, { title })}
               onChangePriority={(priority) =>
                 updateTask(selectedTask.id, { priority })
               }
