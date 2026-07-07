@@ -174,10 +174,14 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
 
           {selectedTask && (
             <TaskDetailPanel
+              key={selectedTask.id}
               task={selectedTask}
               onClose={() => setSelectedTaskId(null)}
               onChangePriority={(priority) =>
                 updateTask(selectedTask.id, { priority })
+              }
+              onChangeDescription={(description) =>
+                updateTask(selectedTask.id, { description })
               }
             />
           )}

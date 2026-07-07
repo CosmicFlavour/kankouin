@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { TaskSummary } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 const PRIORITIES = ["low", "medium", "high"];
 
@@ -8,14 +9,22 @@ interface TaskDetailPanelProps {
   task: TaskSummary;
   onClose: () => void;
   onChangePriority: (priority: string) => Promise<void>;
+  onChangeDescription: (description: string) => Promise<void>;
 }
 
 export function TaskDetailPanel({
   task,
   onClose,
   onChangePriority,
+  onChangeDescription,
 }: TaskDetailPanelProps) {
   const [priorityError, setPriorityError] = useState<string | null>(null);
+  const [descriptionDraft, setDescriptionDraft] = useState(
+    task.description ?? "",
+  );
+  const [descriptionError, setDescriptionError] = useState<string | null>(
+    null,
+  );
 
   async function handlePriorityChange(e: React.ChangeEvent<HTMLSelectElement>) {
     try {
@@ -23,6 +32,16 @@ export function TaskDetailPanel({
       setPriorityError(null);
     } catch (err) {
       setPriorityError(String(err));
+    }
+  }
+
+  async function handleSaveDescription(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await onChangeDescription(descriptionDraft);
+      setDescriptionError(null);
+    } catch (err) {
+      setDescriptionError(String(err));
     }
   }
 
@@ -61,7 +80,22 @@ export function TaskDetailPanel({
         </div>
         <div>
           <dt className="text-muted-foreground">Description</dt>
-          <dd>{task.description || "No description"}</dd>
+          <dd>
+            <form onSubmit={handleSaveDescription} className="mt-1 flex flex-col gap-2">
+              <Textarea
+                value={descriptionDraft}
+                onChange={(e) => setDescriptionDraft(e.target.value)}
+                placeholder="No description"
+                rows={4}
+              />
+              <Button type="submit" size="sm" variant="outline">
+                Save description
+              </Button>
+              {descriptionError && (
+                <p className="text-sm text-destructive">{descriptionError}</p>
+              )}
+            </form>
+          </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Tags</dt>
