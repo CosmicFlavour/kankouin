@@ -63,14 +63,17 @@ export function useTasks(projectId: string | null) {
     };
   }, [projectId]);
 
-  async function createTask(title: string) {
+  async function createTask(
+    title: string,
+    attachment?: { epicId?: string | null; userStoryId?: string | null },
+  ) {
     if (!projectId) return;
     const created = await invoke<Task>("create_task", {
       projectId,
       title,
       description: null,
-      epicId: null,
-      userStoryId: null,
+      epicId: attachment?.epicId ?? null,
+      userStoryId: attachment?.userStoryId ?? null,
       priority: null,
     });
     // A freshly created task has no tags yet and can't be blocked (no

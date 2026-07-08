@@ -11,12 +11,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TaskColumn } from "@/components/TaskColumn";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
+import type { TaskScope } from "@/components/HierarchyPanel";
 
 interface TaskBoardProps {
   projectId: string;
   workspaceId: string;
+  scope: TaskScope;
   focusTaskId?: string | null;
   onFocusHandled?: () => void;
+}
+
+function taskMatchesScope(task: TaskSummary, scope: TaskScope): boolean {
+  if (scope === null) return true;
+  if (scope.type === "epic") return task.epic_id === scope.id;
+  return task.user_story_id === scope.id;
 }
 
 const COLUMNS: { state: TaskSummary["state"]; label: string }[] = [
@@ -29,11 +37,12 @@ const COLUMNS: { state: TaskSummary["state"]; label: string }[] = [
 export function TaskBoard({
   projectId,
   workspaceId,
+  scope,
   focusTaskId,
   onFocusHandled,
 }: TaskBoardProps) {
   const {
-    tasks,
+    tasks: allTasks,
     loading,
     error,
     createTask,
@@ -47,7 +56,10 @@ export function TaskBoard({
   const [moveError, setMoveError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
+  const tasks = allTasks.filter((t) => taskMatchesScope(t, scope));
+  // Detail panel stays open for a task even if it falls outside the current
+  // scope filter (e.g. it was opened before the scope changed).
+  const selectedTask = allTasks.find((t) => t.id === selectedTaskId);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -55,16 +67,19 @@ export function TaskBoard({
 
   useEffect(() => {
     if (!focusTaskId) return;
-    if (!tasks.some((t) => t.id === focusTaskId)) return;
+    if (!allTasks.some((t) => t.id === focusTaskId)) return;
     setSelectedTaskId(focusTaskId);
     onFocusHandled?.();
-  }, [focusTaskId, tasks, onFocusHandled]);
+  }, [focusTaskId, allTasks, onFocusHandled]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
     try {
-      await createTask(title.trim());
+      await createTask(title.trim(), {
+        epicId: scope?.type === "epic" ? scope.id : null,
+        userStoryId: scope?.type === "story" ? scope.id : null,
+      });
       setTitle("");
       setCreateError(null);
     } catch (err) {

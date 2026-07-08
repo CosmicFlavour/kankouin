@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProjects } from "@/hooks/useProjects";
 import type { Workspace } from "@/hooks/useWorkspaces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { TaskBoard } from "@/components/TaskBoard";
+import { HierarchyPanel, type TaskScope } from "@/components/HierarchyPanel";
 
 interface ProjectPanelProps {
   workspace: Workspace;
@@ -24,8 +25,13 @@ export function ProjectPanel({
   const { projects, loading, error, createProject } = useProjects(workspace.id);
   const [projectName, setProjectName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
+  const [scope, setScope] = useState<TaskScope>(null);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
+
+  useEffect(() => {
+    setScope(null);
+  }, [selectedProjectId]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -79,12 +85,20 @@ export function ProjectPanel({
       </form>
 
       {selectedProject && (
-        <TaskBoard
-          projectId={selectedProject.id}
-          workspaceId={workspace.id}
-          focusTaskId={focusTaskId}
-          onFocusHandled={onFocusHandled}
-        />
+        <div className="flex gap-4">
+          <HierarchyPanel
+            projectId={selectedProject.id}
+            scope={scope}
+            onScopeChange={setScope}
+          />
+          <TaskBoard
+            projectId={selectedProject.id}
+            workspaceId={workspace.id}
+            scope={scope}
+            focusTaskId={focusTaskId}
+            onFocusHandled={onFocusHandled}
+          />
+        </div>
       )}
     </div>
   );
