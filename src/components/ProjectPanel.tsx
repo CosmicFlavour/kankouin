@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useProjects } from "@/hooks/useProjects";
+import { useEpics } from "@/hooks/useEpics";
+import { useUserStories } from "@/hooks/useUserStories";
 import type { Workspace } from "@/hooks/useWorkspaces";
 import { TaskBoard } from "@/components/TaskBoard";
-import { HierarchyPanel, type TaskScope } from "@/components/HierarchyPanel";
+import type { TaskScope } from "@/components/ScopeFilter";
 
 interface ProjectPanelProps {
   workspace: Workspace;
@@ -18,6 +20,18 @@ export function ProjectPanel({
   onFocusHandled,
 }: ProjectPanelProps) {
   const { projects } = useProjects(workspace.id);
+  const {
+    epics,
+    loading: epicsLoading,
+    error: epicsError,
+    createEpic,
+  } = useEpics(projectId);
+  const {
+    userStories,
+    loading: storiesLoading,
+    error: storiesError,
+    createUserStory,
+  } = useUserStories(projectId);
   const [scope, setScope] = useState<TaskScope>(null);
 
   const project = projects.find((p) => p.id === projectId);
@@ -32,20 +46,22 @@ export function ProjectPanel({
         {workspace.name} / {project?.name ?? "..."}
       </h2>
 
-      <div className="flex flex-1 gap-4">
-        <HierarchyPanel
-          projectId={projectId}
-          scope={scope}
-          onScopeChange={setScope}
-        />
-        <TaskBoard
-          projectId={projectId}
-          workspaceId={workspace.id}
-          scope={scope}
-          focusTaskId={focusTaskId}
-          onFocusHandled={onFocusHandled}
-        />
-      </div>
+      <TaskBoard
+        projectId={projectId}
+        workspaceId={workspace.id}
+        scope={scope}
+        onScopeChange={setScope}
+        epics={epics}
+        epicsLoading={epicsLoading}
+        epicsError={epicsError}
+        onCreateEpic={createEpic}
+        userStories={userStories}
+        storiesLoading={storiesLoading}
+        storiesError={storiesError}
+        onCreateUserStory={createUserStory}
+        focusTaskId={focusTaskId}
+        onFocusHandled={onFocusHandled}
+      />
     </div>
   );
 }

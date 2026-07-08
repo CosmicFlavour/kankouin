@@ -7,16 +7,28 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { useTasks, type TaskSummary } from "@/hooks/useTasks";
+import type { Epic } from "@/hooks/useEpics";
+import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { TaskColumn } from "@/components/TaskColumn";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
-import type { TaskScope } from "@/components/HierarchyPanel";
+import { ScopeFilter, type TaskScope } from "@/components/ScopeFilter";
 
 interface TaskBoardProps {
   projectId: string;
   workspaceId: string;
   scope: TaskScope;
+  onScopeChange: (scope: TaskScope) => void;
+  epics: Epic[];
+  epicsLoading: boolean;
+  epicsError: string | null;
+  onCreateEpic: (title: string) => Promise<unknown>;
+  userStories: UserStory[];
+  storiesLoading: boolean;
+  storiesError: string | null;
+  onCreateUserStory: (title: string, epicId: string | null) => Promise<unknown>;
   focusTaskId?: string | null;
   onFocusHandled?: () => void;
 }
@@ -38,6 +50,15 @@ export function TaskBoard({
   projectId,
   workspaceId,
   scope,
+  onScopeChange,
+  epics,
+  epicsLoading,
+  epicsError,
+  onCreateEpic,
+  userStories,
+  storiesLoading,
+  storiesError,
+  onCreateUserStory,
   focusTaskId,
   onFocusHandled,
 }: TaskBoardProps) {
@@ -106,15 +127,32 @@ export function TaskBoard({
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={handleCreate} className="flex max-w-sm flex-col gap-2">
-        <Input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="New task title"
+      <div className="flex items-start gap-4">
+        <form onSubmit={handleCreate} className="flex max-w-sm flex-1 flex-col gap-2">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="New task title"
+          />
+          <Button type="submit">Create task</Button>
+          {createError && (
+            <p className="text-sm text-destructive">{createError}</p>
+          )}
+        </form>
+
+        <ScopeFilter
+          scope={scope}
+          onScopeChange={onScopeChange}
+          epics={epics}
+          epicsLoading={epicsLoading}
+          epicsError={epicsError}
+          onCreateEpic={onCreateEpic}
+          userStories={userStories}
+          storiesLoading={storiesLoading}
+          storiesError={storiesError}
+          onCreateUserStory={onCreateUserStory}
         />
-        <Button type="submit">Create task</Button>
-        {createError && <p className="text-sm text-destructive">{createError}</p>}
-      </form>
+      </div>
 
       {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
       {error && (
@@ -125,27 +163,35 @@ export function TaskBoard({
       {moveError && <p className="text-sm text-destructive">{moveError}</p>}
 
       {!loading && !error && (
-        <div className="flex gap-4">
-          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-            <div className="flex gap-4">
-              {COLUMNS.map((column) => (
-                <TaskColumn
-                  key={column.state}
-                  state={column.state}
-                  label={column.label}
-                  tasks={tasks.filter((t) => t.state === column.state)}
-                  onSelectTask={setSelectedTaskId}
-                />
-              ))}
-            </div>
-          </DndContext>
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <div className="flex gap-4">
+            {COLUMNS.map((column) => (
+              <TaskColumn
+                key={column.state}
+                state={column.state}
+                label={column.label}
+                tasks={tasks.filter((t) => t.state === column.state)}
+                epics={epics}
+                userStories={userStories}
+                onSelectTask={setSelectedTaskId}
+              />
+            ))}
+          </div>
+        </DndContext>
+      )}
 
+      <Dialog
+        open={!!selectedTask}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTaskId(null);
+        }}
+      >
+        <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
           {selectedTask && (
             <TaskDetailPanel
               key={selectedTask.id}
               task={selectedTask}
               workspaceId={workspaceId}
-              onClose={() => setSelectedTaskId(null)}
               onChangeTitle={(title) => updateTask(selectedTask.id, { title })}
               onChangePriority={(priority) =>
                 updateTask(selectedTask.id, { priority })
@@ -161,8 +207,8 @@ export function TaskBoard({
               }
             />
           )}
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

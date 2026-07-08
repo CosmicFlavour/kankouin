@@ -1,13 +1,20 @@
 import { useDraggable } from "@dnd-kit/core";
 import type { TaskSummary } from "@/hooks/useTasks";
+import type { Epic } from "@/hooks/useEpics";
+import type { UserStory } from "@/hooks/useUserStories";
 import { cn } from "@/lib/utils";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
+import { HierarchyBadge } from "@/components/HierarchyBadge";
 
 export function TaskCard({
   task,
+  epics,
+  userStories,
   onSelect,
 }: {
   task: TaskSummary;
+  epics: Epic[];
+  userStories: UserStory[];
   onSelect: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -30,7 +37,10 @@ export function TaskCard({
       )}
     >
       <span>{task.title}</span>
-      <DeadlineBadge task={task} />
+      <div className="flex flex-wrap gap-1">
+        <DeadlineBadge task={task} />
+        <HierarchyBadge task={task} epics={epics} userStories={userStories} />
+      </div>
     </div>
   );
 }
