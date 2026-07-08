@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import {
   DndContext,
   PointerSensor,
-  useDraggable,
-  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -11,8 +9,7 @@ import {
 import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { DeadlineBadge } from "@/components/DeadlineBadge";
+import { TaskColumn } from "@/components/TaskColumn";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 
 interface TaskBoardProps {
@@ -28,75 +25,6 @@ const COLUMNS: { state: TaskSummary["state"]; label: string }[] = [
   { state: "under_review", label: "Under Review" },
   { state: "done", label: "Done" },
 ];
-
-function TaskCard({
-  task,
-  onSelect,
-}: {
-  task: TaskSummary;
-  onSelect: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id: task.id });
-
-  return (
-    <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      onClick={onSelect}
-      style={
-        transform
-          ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-          : undefined
-      }
-      className={cn(
-        "flex cursor-grab flex-col gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm active:cursor-grabbing",
-        isDragging && "opacity-50",
-      )}
-    >
-      <span>{task.title}</span>
-      <DeadlineBadge task={task} />
-    </div>
-  );
-}
-
-function TaskColumn({
-  state,
-  label,
-  tasks,
-  onSelectTask,
-}: {
-  state: string;
-  label: string;
-  tasks: TaskSummary[];
-  onSelectTask: (taskId: string) => void;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: state });
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "flex w-56 shrink-0 flex-col gap-2 rounded-md p-2",
-        isOver && "bg-muted",
-      )}
-    >
-      <h3 className="text-sm font-medium text-muted-foreground">
-        {label} ({tasks.length})
-      </h3>
-      <div className="flex flex-col gap-1">
-        {tasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            onSelect={() => onSelectTask(task.id)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export function TaskBoard({
   projectId,
