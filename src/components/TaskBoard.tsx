@@ -81,6 +81,7 @@ export function TaskBoard({
     updateTask,
     setDeadline,
     setTaskTags,
+    setTaskParent,
   } = useTasks(projectId);
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -204,6 +205,8 @@ export function TaskBoard({
               key={selectedTask.id}
               task={selectedTask}
               workspaceId={workspaceId}
+              epics={epics}
+              userStories={userStories}
               onChangeTitle={(title) => updateTask(selectedTask.id, { title })}
               onChangePriority={(priority) =>
                 updateTask(selectedTask.id, { priority })
@@ -216,6 +219,9 @@ export function TaskBoard({
               }
               onChangeTags={(tagIds, allTags) =>
                 setTaskTags(selectedTask.id, tagIds, allTags)
+              }
+              onChangeParent={(epicId, userStoryId) =>
+                setTaskParent(selectedTask.id, epicId, userStoryId)
               }
             />
           )}

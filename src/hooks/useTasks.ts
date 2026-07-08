@@ -134,6 +134,21 @@ export function useTasks(projectId: string | null) {
     );
   }
 
+  async function setTaskParent(
+    taskId: string,
+    epicId: string | null,
+    userStoryId: string | null,
+  ) {
+    const updated = await invoke<Task>("set_task_parent", {
+      id: taskId,
+      epicId,
+      userStoryId,
+    });
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
+    );
+  }
+
   return {
     tasks,
     loading,
@@ -143,5 +158,6 @@ export function useTasks(projectId: string | null) {
     updateTask,
     setDeadline,
     setTaskTags,
+    setTaskParent,
   };
 }
