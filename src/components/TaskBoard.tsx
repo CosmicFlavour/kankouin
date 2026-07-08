@@ -33,10 +33,20 @@ interface TaskBoardProps {
   onFocusHandled?: () => void;
 }
 
-function taskMatchesScope(task: TaskSummary, scope: TaskScope): boolean {
+function taskMatchesScope(
+  task: TaskSummary,
+  scope: TaskScope,
+  userStories: UserStory[],
+): boolean {
   if (scope === null) return true;
-  if (scope.type === "epic") return task.epic_id === scope.id;
-  return task.user_story_id === scope.id;
+  if (scope.type === "story") return task.user_story_id === scope.id;
+
+  // Epic scope: tasks attached directly to the epic, or to one of its
+  // user stories.
+  if (task.epic_id === scope.id) return true;
+  if (!task.user_story_id) return false;
+  const story = userStories.find((s) => s.id === task.user_story_id);
+  return story?.epic_id === scope.id;
 }
 
 const COLUMNS: { state: TaskSummary["state"]; label: string }[] = [
@@ -77,7 +87,9 @@ export function TaskBoard({
   const [moveError, setMoveError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  const tasks = allTasks.filter((t) => taskMatchesScope(t, scope));
+  const tasks = allTasks.filter((t) =>
+    taskMatchesScope(t, scope, userStories),
+  );
   // Detail panel stays open for a task even if it falls outside the current
   // scope filter (e.g. it was opened before the scope changed).
   const selectedTask = allTasks.find((t) => t.id === selectedTaskId);
