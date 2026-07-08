@@ -12,6 +12,12 @@ import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import {
+  exactDateUrgency,
+  formatExactDate,
+  fuzzyBucketClassName,
+  fuzzyBucketLabel,
+} from "@/lib/deadline";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 
 interface TaskBoardProps {
@@ -25,6 +31,39 @@ const COLUMNS: { state: TaskSummary["state"]; label: string }[] = [
   { state: "under_review", label: "Under Review" },
   { state: "done", label: "Done" },
 ];
+
+function DeadlineBadge({ task }: { task: TaskSummary }) {
+  if (task.deadline_type === "exact" && task.exact_date) {
+    const urgency = exactDateUrgency(task.exact_date);
+    return (
+      <span
+        className={cn(
+          "inline-flex w-fit items-center rounded-md border px-1.5 py-0.5 text-xs font-medium",
+          urgency === "normal"
+            ? "border-border text-muted-foreground"
+            : "border-destructive/50 bg-destructive/10 text-destructive",
+        )}
+      >
+        {formatExactDate(task.exact_date)}
+      </span>
+    );
+  }
+
+  if (task.deadline_type === "fuzzy" && task.fuzzy_bucket) {
+    return (
+      <span
+        className={cn(
+          "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium",
+          fuzzyBucketClassName(task.fuzzy_bucket),
+        )}
+      >
+        {fuzzyBucketLabel(task.fuzzy_bucket)}
+      </span>
+    );
+  }
+
+  return null;
+}
 
 function TaskCard({
   task,
@@ -48,11 +87,12 @@ function TaskCard({
           : undefined
       }
       className={cn(
-        "cursor-grab rounded-md border border-border bg-background px-3 py-2 text-sm active:cursor-grabbing",
+        "flex cursor-grab flex-col gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm active:cursor-grabbing",
         isDragging && "opacity-50",
       )}
     >
-      {task.title}
+      <span>{task.title}</span>
+      <DeadlineBadge task={task} />
     </div>
   );
 }

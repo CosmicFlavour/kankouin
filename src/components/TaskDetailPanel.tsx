@@ -2,18 +2,12 @@ import { useState } from "react";
 import type { Tag, TaskSummary } from "@/hooks/useTasks";
 import { useTaskDetail } from "@/hooks/useTaskDetail";
 import { useTags } from "@/hooks/useTags";
+import { FUZZY_BUCKETS } from "@/lib/deadline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 const PRIORITIES = ["low", "medium", "high"];
-
-const FUZZY_BUCKETS: { value: string; label: string }[] = [
-  { value: "this_week", label: "This Week" },
-  { value: "this_month", label: "This Month" },
-  { value: "this_quarter", label: "This Quarter" },
-  { value: "someday", label: "Someday" },
-];
 
 function SubtaskSection({ taskId }: { taskId: string }) {
   const { detail, loading, error, addSubtask, toggleSubtask } =
