@@ -23,12 +23,18 @@ function App() {
         workspaces={workspaces}
         loading={loading}
         error={error}
-        onCreate={createWorkspace}
-        selectedWorkspaceId={showToday ? null : selectedWorkspaceId}
-        onSelect={(workspaceId) => {
+        onCreateWorkspace={createWorkspace}
+        selectedWorkspaceId={selectedWorkspaceId}
+        selectedProjectId={selectedProjectId}
+        onSelectWorkspace={(workspaceId) => {
           setShowToday(false);
           setSelectedWorkspaceId(workspaceId);
           setSelectedProjectId(null);
+        }}
+        onSelectProject={(workspaceId, projectId) => {
+          setShowToday(false);
+          setSelectedWorkspaceId(workspaceId);
+          setSelectedProjectId(projectId);
         }}
         showToday={showToday}
         onSelectToday={() => setShowToday(true)}
@@ -49,11 +55,15 @@ function App() {
             Select a workspace to get started
           </p>
         )}
-        {!showToday && selectedWorkspace && (
+        {!showToday && selectedWorkspace && !selectedProjectId && (
+          <p className="m-auto text-muted-foreground">
+            Select a project to get started
+          </p>
+        )}
+        {!showToday && selectedWorkspace && selectedProjectId && (
           <ProjectPanel
             workspace={selectedWorkspace}
-            selectedProjectId={selectedProjectId}
-            onSelectProject={setSelectedProjectId}
+            projectId={selectedProjectId}
             focusTaskId={focusTaskId}
             onFocusHandled={() => setFocusTaskId(null)}
           />
