@@ -416,6 +416,27 @@ fn apply_deadline(
     get_task_row(conn, &id)
 }
 
+/// Reassigns a task's parent (Project / Epic / User Story). Unlike `update`,
+/// this sets `epic_id`/`user_story_id` directly rather than via `COALESCE`,
+/// since the caller needs to be able to clear either field back to NULL
+/// (e.g. moving a task off a user story back onto the bare project).
+fn set_parent(
+    conn: &Connection,
+    id: String,
+    epic_id: Option<String>,
+    user_story_id: Option<String>,
+) -> AppResult<Task> {
+    let now = Utc::now().to_rfc3339();
+    let changed = conn.execute(
+        "UPDATE tasks SET epic_id = ?2, user_story_id = ?3, updated_at = ?4 WHERE id = ?1",
+        params![id, epic_id, user_story_id, now],
+    )?;
+    if changed == 0 {
+        return Err(AppError::NotFound);
+    }
+    get_task_row(conn, &id)
+}
+
 fn archive(conn: &Connection, id: String) -> AppResult<()> {
     let now = Utc::now().to_rfc3339();
     let changed = conn.execute(
@@ -637,6 +658,17 @@ pub fn set_deadline(
 }
 
 #[tauri::command]
+pub fn set_task_parent(
+    state: State<AppState>,
+    id: String,
+    epic_id: Option<String>,
+    user_story_id: Option<String>,
+) -> AppResult<Task> {
+    let conn = state.conn()?;
+    set_parent(&conn, id, epic_id, user_story_id)
+}
+
+#[tauri::command]
 pub fn archive_task(state: State<AppState>, id: String) -> AppResult<()> {
     let conn = state.conn()?;
     archive(&conn, id)
@@ -808,6 +840,35 @@ mod tests {
 
         let missing_bucket = apply_deadline(&conn, task.id, "fuzzy".into(), None, None);
         assert!(matches!(missing_bucket, Err(AppError::Invalid(_))));
+    }
+
+    #[test]
+    fn set_parent_moves_between_epic_and_story_and_clears() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let epic =
+            crate::commands::epics::create(&conn, project_id.clone(), "Epic".into(), None).unwrap();
+        let story = crate::commands::user_stories::create(
+            &conn,
+            project_id.clone(),
+            Some(epic.id.clone()),
+            "Story".into(),
+            None,
+        )
+        .unwrap();
+        let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+
+        let on_epic = set_parent(&conn, task.id.clone(), Some(epic.id.clone()), None).unwrap();
+        assert_eq!(on_epic.epic_id, Some(epic.id));
+        assert_eq!(on_epic.user_story_id, None);
+
+        let on_story = set_parent(&conn, task.id.clone(), None, Some(story.id.clone())).unwrap();
+        assert_eq!(on_story.epic_id, None);
+        assert_eq!(on_story.user_story_id, Some(story.id));
+
+        let cleared = set_parent(&conn, task.id, None, None).unwrap();
+        assert_eq!(cleared.epic_id, None);
+        assert_eq!(cleared.user_story_id, None);
     }
 
     #[test]

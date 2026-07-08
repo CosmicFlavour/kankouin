@@ -54,6 +54,7 @@ pub fn run() {
             commands::tasks::update_task,
             commands::tasks::update_task_state,
             commands::tasks::set_deadline,
+            commands::tasks::set_task_parent,
             commands::tasks::archive_task,
             commands::tasks::list_tasks_today,
             commands::tasks::list_ready_to_work_on,
