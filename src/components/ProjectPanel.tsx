@@ -10,12 +10,16 @@ interface ProjectPanelProps {
   workspace: Workspace;
   selectedProjectId: string | null;
   onSelectProject: (projectId: string) => void;
+  focusTaskId?: string | null;
+  onFocusHandled?: () => void;
 }
 
 export function ProjectPanel({
   workspace,
   selectedProjectId,
   onSelectProject,
+  focusTaskId,
+  onFocusHandled,
 }: ProjectPanelProps) {
   const { projects, loading, error, createProject } = useProjects(workspace.id);
   const [projectName, setProjectName] = useState("");
@@ -75,7 +79,12 @@ export function ProjectPanel({
       </form>
 
       {selectedProject && (
-        <TaskBoard projectId={selectedProject.id} workspaceId={workspace.id} />
+        <TaskBoard
+          projectId={selectedProject.id}
+          workspaceId={workspace.id}
+          focusTaskId={focusTaskId}
+          onFocusHandled={onFocusHandled}
+        />
       )}
     </div>
   );

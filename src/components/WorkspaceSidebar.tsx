@@ -12,6 +12,8 @@ interface WorkspaceSidebarProps {
   onCreate: (name: string) => Promise<void>;
   selectedWorkspaceId: string | null;
   onSelect: (workspaceId: string) => void;
+  showToday: boolean;
+  onSelectToday: () => void;
 }
 
 export function WorkspaceSidebar({
@@ -21,6 +23,8 @@ export function WorkspaceSidebar({
   onCreate,
   selectedWorkspaceId,
   onSelect,
+  showToday,
+  onSelectToday,
 }: WorkspaceSidebarProps) {
   const [name, setName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -41,6 +45,16 @@ export function WorkspaceSidebar({
     <aside className="flex w-64 shrink-0 flex-col border-r border-border p-4">
       <h1 className="text-lg font-semibold">Kankouin</h1>
       <nav className="mt-6 flex flex-col gap-1">
+        <button
+          type="button"
+          onClick={onSelectToday}
+          className={cn(
+            "rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted",
+            showToday && "bg-accent text-foreground",
+          )}
+        >
+          Today / This Week
+        </button>
         {loading && (
           <p className="px-2 py-1.5 text-sm text-muted-foreground">Loading...</p>
         )}
