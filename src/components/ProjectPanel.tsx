@@ -74,7 +74,9 @@ export function ProjectPanel({
         {createError && <p className="text-sm text-destructive">{createError}</p>}
       </form>
 
-      {selectedProject && <TaskBoard projectId={selectedProject.id} />}
+      {selectedProject && (
+        <TaskBoard projectId={selectedProject.id} workspaceId={workspace.id} />
+      )}
     </div>
   );
 }

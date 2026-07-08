@@ -123,6 +123,14 @@ export function useTasks(projectId: string | null) {
     );
   }
 
+  async function setTaskTags(taskId: string, tagIds: string[], allTags: Tag[]) {
+    await invoke("set_task_tags", { taskId, tagIds });
+    const tags = allTags.filter((tag) => tagIds.includes(tag.id));
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, tags } : t)),
+    );
+  }
+
   return {
     tasks,
     loading,
@@ -131,5 +139,6 @@ export function useTasks(projectId: string | null) {
     moveTask,
     updateTask,
     setDeadline,
+    setTaskTags,
   };
 }

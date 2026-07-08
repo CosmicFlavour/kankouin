@@ -16,6 +16,7 @@ import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 
 interface TaskBoardProps {
   projectId: string;
+  workspaceId: string;
 }
 
 const COLUMNS: { state: TaskSummary["state"]; label: string }[] = [
@@ -93,9 +94,17 @@ function TaskColumn({
   );
 }
 
-export function TaskBoard({ projectId }: TaskBoardProps) {
-  const { tasks, loading, error, createTask, moveTask, updateTask, setDeadline } =
-    useTasks(projectId);
+export function TaskBoard({ projectId, workspaceId }: TaskBoardProps) {
+  const {
+    tasks,
+    loading,
+    error,
+    createTask,
+    moveTask,
+    updateTask,
+    setDeadline,
+    setTaskTags,
+  } = useTasks(projectId);
   const [title, setTitle] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -176,6 +185,7 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
             <TaskDetailPanel
               key={selectedTask.id}
               task={selectedTask}
+              workspaceId={workspaceId}
               onClose={() => setSelectedTaskId(null)}
               onChangeTitle={(title) => updateTask(selectedTask.id, { title })}
               onChangePriority={(priority) =>
@@ -186,6 +196,9 @@ export function TaskBoard({ projectId }: TaskBoardProps) {
               }
               onChangeDeadline={(deadlineType, value) =>
                 setDeadline(selectedTask.id, deadlineType, value)
+              }
+              onChangeTags={(tagIds, allTags) =>
+                setTaskTags(selectedTask.id, tagIds, allTags)
               }
             />
           )}
