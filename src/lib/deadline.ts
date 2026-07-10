@@ -57,3 +57,17 @@ export function formatExactDate(exactDate: string): string {
     day: "numeric",
   });
 }
+
+// Validates real calendar dates (rejects e.g. 2026-02-30) without ever
+// round-tripping through toISOString(), which shifts the calendar day in
+// timezones ahead of UTC and would misflag valid dates as invalid.
+export function isValidDateString(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12) return false;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return day >= 1 && day <= daysInMonth;
+}

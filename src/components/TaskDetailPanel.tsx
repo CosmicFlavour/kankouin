@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Tag, TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
-import { FUZZY_BUCKETS, fuzzyBucketClassName } from "@/lib/deadline";
+import {
+  FUZZY_BUCKETS,
+  fuzzyBucketClassName,
+  isValidDateString,
+} from "@/lib/deadline";
 import { priorityButtonClassName } from "@/lib/priority";
 import { TASK_STATES } from "@/lib/taskState";
 import { cn } from "@/lib/utils";
@@ -11,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SubtaskSection } from "@/components/SubtaskSection";
 import { TagSection } from "@/components/TagSection";
+import { DatePickerPopover } from "@/components/DatePickerPopover";
 
 const PRIORITIES = ["low", "medium", "high"];
 
@@ -58,7 +63,20 @@ export function TaskDetailPanel({
     null,
   );
   const [deadlineError, setDeadlineError] = useState<string | null>(null);
+  const [exactDateDraft, setExactDateDraft] = useState(
+    task.deadline_type === "exact" ? (task.exact_date ?? "") : "",
+  );
   const [parentError, setParentError] = useState<string | null>(null);
+
+  // Clicking a fuzzy bucket or switching parent selection can change
+  // task.deadline_type without remounting this component (same task id), so
+  // the draft needs to stay in sync with the task rather than just seeding
+  // once.
+  useEffect(() => {
+    setExactDateDraft(
+      task.deadline_type === "exact" ? (task.exact_date ?? "") : "",
+    );
+  }, [task.deadline_type, task.exact_date]);
 
   const parentValue = task.user_story_id
     ? `story:${task.user_story_id}`
@@ -145,14 +163,24 @@ export function TaskDetailPanel({
     }
   }
 
-  async function handleExactDateChange(value: string) {
-    if (!value) return;
+  async function commitExactDate(value: string) {
+    if (task.deadline_type === "exact" && value === task.exact_date) return;
+    if (!isValidDateString(value)) {
+      setDeadlineError("Use YYYY-MM-DD");
+      return;
+    }
     try {
       await onChangeDeadline("exact", value);
       setDeadlineError(null);
     } catch (err) {
       setDeadlineError(String(err));
     }
+  }
+
+  async function saveExactDateIfChanged() {
+    const trimmed = exactDateDraft.trim();
+    if (!trimmed) return;
+    await commitExactDate(trimmed);
   }
 
   return (
@@ -263,11 +291,22 @@ export function TaskDetailPanel({
                 </button>
               ))}
             </div>
-            <Input
-              type="date"
-              value={task.deadline_type === "exact" ? (task.exact_date ?? "") : ""}
-              onChange={(e) => handleExactDateChange(e.target.value)}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="YYYY-MM-DD"
+                value={exactDateDraft}
+                onChange={(e) => setExactDateDraft(e.target.value)}
+                onBlur={saveExactDateIfChanged}
+              />
+              <DatePickerPopover
+                value={
+                  task.deadline_type === "exact" ? (task.exact_date ?? "") : ""
+                }
+                onSelect={commitExactDate}
+              />
+            </div>
             {deadlineError && (
               <p className="text-sm text-destructive">{deadlineError}</p>
             )}
