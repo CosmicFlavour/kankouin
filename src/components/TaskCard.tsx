@@ -4,6 +4,7 @@ import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { cn } from "@/lib/utils";
 import { taskHierarchyBreadcrumb } from "@/lib/hierarchy";
+import { priorityCardClassName } from "@/lib/priority";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
 
 export function TaskCard({
@@ -32,7 +33,8 @@ export function TaskCard({
           : undefined
       }
       className={cn(
-        "flex cursor-grab flex-col gap-1 rounded-md border border-border bg-background px-3 py-2 text-sm active:cursor-grabbing",
+        "flex cursor-grab flex-col gap-1 rounded-md border px-3 py-2 text-sm active:cursor-grabbing",
+        priorityCardClassName(task.priority),
         isDragging && "opacity-50",
       )}
     >
