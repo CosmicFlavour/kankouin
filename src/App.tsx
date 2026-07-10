@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useStaleTasks } from "@/hooks/useStaleTasks";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { ProjectPanel } from "@/components/ProjectPanel";
 import { TodayView } from "@/components/TodayView";
+import { DailyReviewDialog } from "@/components/DailyReviewDialog";
 
 function App() {
   const { workspaces, loading, error, createWorkspace } = useWorkspaces();
+  const { tasks: staleTasks, loading: staleLoading, refresh: refreshStale } =
+    useStaleTasks();
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
     null,
   );
@@ -14,8 +18,17 @@ function App() {
   );
   const [showToday, setShowToday] = useState(false);
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
+  const [dailyReviewOpen, setDailyReviewOpen] = useState(false);
+  const [autoOpenedReview, setAutoOpenedReview] = useState(false);
 
   const selectedWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId);
+
+  useEffect(() => {
+    if (!autoOpenedReview && !staleLoading && staleTasks.length > 0) {
+      setDailyReviewOpen(true);
+      setAutoOpenedReview(true);
+    }
+  }, [autoOpenedReview, staleLoading, staleTasks]);
 
   return (
     <div className="flex h-screen bg-background text-foreground">
@@ -38,6 +51,8 @@ function App() {
         }}
         showToday={showToday}
         onSelectToday={() => setShowToday(true)}
+        staleCount={staleTasks.length}
+        onOpenDailyReview={() => setDailyReviewOpen(true)}
       />
       <main className="flex flex-1 flex-col p-6">
         {showToday && (
@@ -69,6 +84,13 @@ function App() {
           />
         )}
       </main>
+
+      <DailyReviewDialog
+        open={dailyReviewOpen}
+        onOpenChange={setDailyReviewOpen}
+        tasks={staleTasks}
+        onFinished={refreshStale}
+      />
     </div>
   );
 }

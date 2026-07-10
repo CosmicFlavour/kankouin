@@ -17,6 +17,8 @@ interface WorkspaceSidebarProps {
   onSelectProject: (workspaceId: string, projectId: string) => void;
   showToday: boolean;
   onSelectToday: () => void;
+  staleCount: number;
+  onOpenDailyReview: () => void;
 }
 
 export function WorkspaceSidebar({
@@ -30,6 +32,8 @@ export function WorkspaceSidebar({
   onSelectProject,
   showToday,
   onSelectToday,
+  staleCount,
+  onOpenDailyReview,
 }: WorkspaceSidebarProps) {
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border p-4">
@@ -45,6 +49,18 @@ export function WorkspaceSidebar({
           )}
         >
           Today / This Week
+        </button>
+        <button
+          type="button"
+          onClick={onOpenDailyReview}
+          className="flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted"
+        >
+          Daily Review
+          {staleCount > 0 && (
+            <span className="rounded-full bg-accent px-1.5 py-0.5 text-xs text-foreground">
+              {staleCount}
+            </span>
+          )}
         </button>
       </nav>
 
