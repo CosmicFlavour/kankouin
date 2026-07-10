@@ -3,8 +3,8 @@ import type { TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { cn } from "@/lib/utils";
+import { taskHierarchyBreadcrumb } from "@/lib/hierarchy";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
-import { HierarchyBadge } from "@/components/HierarchyBadge";
 
 export function TaskCard({
   task,
@@ -32,14 +32,26 @@ export function TaskCard({
           : undefined
       }
       className={cn(
-        "flex cursor-grab flex-col gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm active:cursor-grabbing",
+        "flex cursor-grab flex-col gap-1 rounded-md border border-border bg-background px-3 py-2 text-sm active:cursor-grabbing",
         isDragging && "opacity-50",
       )}
     >
+      <span className="text-xs text-muted-foreground">
+        {taskHierarchyBreadcrumb(task, epics, userStories)}
+      </span>
       <span>{task.title}</span>
-      <div className="flex flex-wrap gap-1">
+      <div className="h-5">
         <DeadlineBadge task={task} />
-        <HierarchyBadge task={task} epics={epics} userStories={userStories} />
+      </div>
+      <div className="flex h-3 items-center gap-1">
+        {task.tags.map((tag) => (
+          <span
+            key={tag.id}
+            title={tag.name}
+            className="size-2 shrink-0 rounded-full"
+            style={{ backgroundColor: tag.color }}
+          />
+        ))}
       </div>
     </div>
   );
