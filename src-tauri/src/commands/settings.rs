@@ -3,10 +3,11 @@ use std::path::Path;
 
 use tauri::{AppHandle, Manager};
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::models::Settings;
 
 const FILE_NAME: &str = "settings.json";
+const VALID_THEMES: [&str; 2] = ["light", "dark"];
 
 /// Reads `settings.json` from `config_dir`. A missing file (first run) or a
 /// corrupted one both fall back to defaults rather than erroring — this is
@@ -31,10 +32,25 @@ fn write(config_dir: &Path, settings: &Settings) -> AppResult<()> {
     Ok(())
 }
 
+// Both save_* helpers read the existing file first and only overwrite their
+// own field, so setting the theme doesn't clobber the sync file path (and
+// vice versa) — Settings has more than one field now.
+
 fn save_last_sync_file_path(config_dir: &Path, path: String) -> AppResult<Settings> {
-    let settings = Settings {
-        last_sync_file_path: Some(path),
-    };
+    let mut settings = read(config_dir);
+    settings.last_sync_file_path = Some(path);
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
+fn save_theme(config_dir: &Path, theme: String) -> AppResult<Settings> {
+    if !VALID_THEMES.contains(&theme.as_str()) {
+        return Err(AppError::Invalid(format!(
+            "invalid theme {theme:?}, expected one of {VALID_THEMES:?}"
+        )));
+    }
+    let mut settings = read(config_dir);
+    settings.theme = Some(theme);
     write(config_dir, &settings)?;
     Ok(settings)
 }
@@ -49,6 +65,12 @@ pub fn get_settings(app: AppHandle) -> AppResult<Settings> {
 pub fn set_last_sync_file_path(app: AppHandle, path: String) -> AppResult<Settings> {
     let config_dir = app.path().app_config_dir()?;
     save_last_sync_file_path(&config_dir, path)
+}
+
+#[tauri::command]
+pub fn set_theme(app: AppHandle, theme: String) -> AppResult<Settings> {
+    let config_dir = app.path().app_config_dir()?;
+    save_theme(&config_dir, theme)
 }
 
 #[cfg(test)]
@@ -98,6 +120,31 @@ mod tests {
             settings.last_sync_file_path.as_deref(),
             Some("/second/path.enc")
         );
+    }
+
+    #[test]
+    fn theme_and_sync_path_do_not_clobber_each_other() {
+        let dir = tempfile::tempdir().unwrap();
+        save_last_sync_file_path(dir.path(), "/some/path.enc".into()).unwrap();
+        save_theme(dir.path(), "dark".into()).unwrap();
+
+        let settings = read(dir.path());
+        assert_eq!(
+            settings.last_sync_file_path.as_deref(),
+            Some("/some/path.enc")
+        );
+        assert_eq!(settings.theme.as_deref(), Some("dark"));
+
+        save_last_sync_file_path(dir.path(), "/other/path.enc".into()).unwrap();
+        let settings = read(dir.path());
+        assert_eq!(settings.theme.as_deref(), Some("dark"));
+    }
+
+    #[test]
+    fn invalid_theme_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = save_theme(dir.path(), "purple".into());
+        assert!(matches!(result, Err(AppError::Invalid(_))));
     }
 
     #[test]
