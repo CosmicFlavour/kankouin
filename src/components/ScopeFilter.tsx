@@ -1,27 +1,10 @@
-import { useState } from "react";
-import { ChevronDownIcon } from "lucide-react";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
-import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 
 export type TaskScope =
   | { type: "epic"; id: string }
   | { type: "story"; id: string }
   | null;
-
-function scopeLabel(
-  scope: TaskScope,
-  epics: Epic[],
-  userStories: UserStory[],
-): string {
-  if (scope === null) return "All tasks";
-  if (scope.type === "epic") {
-    return epics.find((e) => e.id === scope.id)?.title ?? "Epic";
-  }
-  return userStories.find((s) => s.id === scope.id)?.title ?? "User story";
-}
 
 interface ScopeFilterProps {
   scope: TaskScope;
@@ -44,103 +27,84 @@ export function ScopeFilter({
   storiesLoading,
   storiesError,
 }: ScopeFilterProps) {
-  const [open, setOpen] = useState(false);
+  // Both selects derive from the single `scope` value rather than tracking
+  // their own state, so picking a story always keeps the epic select in
+  // sync with that story's parent epic.
+  const selectedEpicId =
+    scope?.type === "epic"
+      ? scope.id
+      : scope?.type === "story"
+        ? (userStories.find((s) => s.id === scope.id)?.epic_id ?? "")
+        : "";
+  const selectedStoryId = scope?.type === "story" ? scope.id : "";
 
-  function isSelected(type: "epic" | "story", id: string) {
-    return scope?.type === type && scope.id === id;
+  function handleEpicChange(epicId: string) {
+    onScopeChange(epicId ? { type: "epic", id: epicId } : null);
   }
 
-  function selectScope(next: TaskScope) {
-    onScopeChange(next);
-    setOpen(false);
+  function handleStoryChange(storyId: string) {
+    if (storyId) {
+      onScopeChange({ type: "story", id: storyId });
+    } else {
+      // Clearing the story falls back to the epic scope if one is implied,
+      // rather than resetting the whole filter.
+      onScopeChange(
+        selectedEpicId ? { type: "epic", id: selectedEpicId } : null,
+      );
+    }
   }
 
-  const unassignedStories = userStories.filter((s) => !s.epic_id);
+  const storyOptions = selectedEpicId
+    ? userStories.filter((s) => s.epic_id === selectedEpicId)
+    : userStories;
+
+  function storyLabel(story: UserStory) {
+    if (selectedEpicId) return story.title;
+    const epicTitle = epics.find((e) => e.id === story.epic_id)?.title;
+    return epicTitle ? `${epicTitle} / ${story.title}` : story.title;
+  }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="gap-1.5">
-          {scopeLabel(scope, epics, userStories)}
-          <ChevronDownIcon className="size-3.5" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="flex flex-col gap-3">
-        {epicsLoading && (
-          <p className="text-muted-foreground">Loading...</p>
-        )}
-        {epicsError && (
-          <p className="text-muted-foreground">
-            Couldn't load epics: {epicsError}
-          </p>
-        )}
-        {storiesError && (
-          <p className="text-muted-foreground">
-            Couldn't load user stories: {storiesError}
-          </p>
-        )}
+    <div className="flex items-center gap-2 text-sm">
+      <select
+        value={selectedEpicId}
+        onChange={(e) => handleEpicChange(e.target.value)}
+        className="rounded-md border border-border bg-background px-2 py-1"
+      >
+        <option value="">All epics</option>
+        {epics.map((epic) => (
+          <option key={epic.id} value={epic.id}>
+            {epic.title}
+          </option>
+        ))}
+      </select>
 
-        <div className="flex flex-col gap-1">
-          <button
-            type="button"
-            onClick={() => selectScope(null)}
-            className={cn(
-              "rounded-md px-2 py-1 text-left hover:bg-muted",
-              scope === null && "bg-accent",
-            )}
-          >
-            All tasks
-          </button>
+      <select
+        value={selectedStoryId}
+        onChange={(e) => handleStoryChange(e.target.value)}
+        className="rounded-md border border-border bg-background px-2 py-1"
+      >
+        <option value="">All user stories</option>
+        {storyOptions.map((story) => (
+          <option key={story.id} value={story.id}>
+            {storyLabel(story)}
+          </option>
+        ))}
+      </select>
 
-          {epics.map((epic) => (
-            <div key={epic.id} className="flex flex-col">
-              <button
-                type="button"
-                onClick={() => selectScope({ type: "epic", id: epic.id })}
-                className={cn(
-                  "rounded-md px-2 py-1 text-left hover:bg-muted",
-                  isSelected("epic", epic.id) && "bg-accent",
-                )}
-              >
-                {epic.title}
-              </button>
-              {userStories
-                .filter((s) => s.epic_id === epic.id)
-                .map((story) => (
-                  <button
-                    key={story.id}
-                    type="button"
-                    onClick={() =>
-                      selectScope({ type: "story", id: story.id })
-                    }
-                    className={cn(
-                      "ml-4 rounded-md px-2 py-1 text-left text-muted-foreground hover:bg-muted",
-                      isSelected("story", story.id) &&
-                        "bg-accent text-foreground",
-                    )}
-                  >
-                    {story.title}
-                  </button>
-                ))}
-            </div>
-          ))}
-
-          {!storiesLoading &&
-            unassignedStories.map((story) => (
-              <button
-                key={story.id}
-                type="button"
-                onClick={() => selectScope({ type: "story", id: story.id })}
-                className={cn(
-                  "rounded-md px-2 py-1 text-left hover:bg-muted",
-                  isSelected("story", story.id) && "bg-accent",
-                )}
-              >
-                {story.title}
-              </button>
-            ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+      {(epicsLoading || storiesLoading) && (
+        <span className="text-xs text-muted-foreground">Loading...</span>
+      )}
+      {epicsError && (
+        <span className="text-xs text-muted-foreground">
+          Couldn't load epics: {epicsError}
+        </span>
+      )}
+      {storiesError && (
+        <span className="text-xs text-muted-foreground">
+          Couldn't load user stories: {storiesError}
+        </span>
+      )}
+    </div>
   );
 }
