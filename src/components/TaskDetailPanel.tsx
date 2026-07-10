@@ -3,6 +3,8 @@ import type { Tag, TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { FUZZY_BUCKETS } from "@/lib/deadline";
+import { priorityButtonClassName } from "@/lib/priority";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -108,9 +110,10 @@ export function TaskDetailPanel({
     }
   }
 
-  async function handlePriorityChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  async function handlePriorityChange(priority: string) {
+    if (priority === task.priority) return;
     try {
-      await onChangePriority(e.target.value);
+      await onChangePriority(priority);
       setPriorityError(null);
     } catch (err) {
       setPriorityError(String(err));
@@ -172,17 +175,22 @@ export function TaskDetailPanel({
         <div>
           <dt className="text-muted-foreground">Priority</dt>
           <dd>
-            <select
-              value={task.priority}
-              onChange={handlePriorityChange}
-              className="mt-1 rounded-md border border-border bg-background px-2 py-1 text-sm"
-            >
-              {PRIORITIES.map((priority) => (
-                <option key={priority} value={priority}>
+            <div className="mt-1 inline-flex overflow-hidden rounded-md border border-border">
+              {PRIORITIES.map((priority, i) => (
+                <button
+                  key={priority}
+                  type="button"
+                  onClick={() => handlePriorityChange(priority)}
+                  className={cn(
+                    "px-3 py-1 text-sm capitalize transition-colors",
+                    i > 0 && "border-l border-border",
+                    priorityButtonClassName(priority, task.priority === priority),
+                  )}
+                >
                   {priority}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
             {priorityError && (
               <p className="mt-1 text-sm text-destructive">{priorityError}</p>
             )}
