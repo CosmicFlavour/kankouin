@@ -4,6 +4,7 @@ import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { FUZZY_BUCKETS } from "@/lib/deadline";
 import { priorityButtonClassName } from "@/lib/priority";
+import { TASK_STATES } from "@/lib/taskState";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ interface TaskDetailPanelProps {
   epics: Epic[];
   userStories: UserStory[];
   onChangeTitle: (title: string) => Promise<void>;
+  onChangeState: (state: string) => Promise<void>;
   onChangePriority: (priority: string) => Promise<void>;
   onChangeDescription: (description: string) => Promise<void>;
   onChangeDeadline: (
@@ -39,6 +41,7 @@ export function TaskDetailPanel({
   epics,
   userStories,
   onChangeTitle,
+  onChangeState,
   onChangePriority,
   onChangeDescription,
   onChangeDeadline,
@@ -47,6 +50,7 @@ export function TaskDetailPanel({
 }: TaskDetailPanelProps) {
   const [titleDraft, setTitleDraft] = useState(task.title);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [stateError, setStateError] = useState<string | null>(null);
   const [priorityError, setPriorityError] = useState<string | null>(null);
   const [descriptionDraft, setDescriptionDraft] = useState(
     task.description ?? "",
@@ -110,6 +114,16 @@ export function TaskDetailPanel({
     }
   }
 
+  async function handleStateChange(state: string) {
+    if (state === task.state) return;
+    try {
+      await onChangeState(state);
+      setStateError(null);
+    } catch (err) {
+      setStateError(String(err));
+    }
+  }
+
   async function handlePriorityChange(priority: string) {
     if (priority === task.priority) return;
     try {
@@ -170,7 +184,29 @@ export function TaskDetailPanel({
         </div>
         <div>
           <dt className="text-muted-foreground">State</dt>
-          <dd>{task.state}</dd>
+          <dd>
+            <div className="mt-1 inline-flex overflow-hidden rounded-md border border-border">
+              {TASK_STATES.map((s, i) => (
+                <button
+                  key={s.state}
+                  type="button"
+                  onClick={() => handleStateChange(s.state)}
+                  className={cn(
+                    "px-3 py-1 text-sm transition-colors",
+                    i > 0 && "border-l border-border",
+                    task.state === s.state
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {stateError && (
+              <p className="mt-1 text-sm text-destructive">{stateError}</p>
+            )}
+          </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Priority</dt>

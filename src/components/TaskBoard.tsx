@@ -9,6 +9,7 @@ import {
 import { PlusIcon } from "lucide-react";
 import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import { useTags } from "@/hooks/useTags";
+import { TASK_STATES } from "@/lib/taskState";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
@@ -90,13 +91,6 @@ function taskMatchesScope(
   const story = userStories.find((s) => s.id === task.user_story_id);
   return story?.epic_id === scope.id;
 }
-
-const COLUMNS: { state: TaskSummary["state"]; label: string }[] = [
-  { state: "todo", label: "Todo" },
-  { state: "doing", label: "Doing" },
-  { state: "under_review", label: "Under Review" },
-  { state: "done", label: "Done" },
-];
 
 export function TaskBoard({
   projectId,
@@ -250,7 +244,7 @@ export function TaskBoard({
       {!loading && !error && (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
           <div className="flex gap-4">
-            {COLUMNS.map((column) => (
+            {TASK_STATES.map((column) => (
               <TaskColumn
                 key={column.state}
                 state={column.state}
@@ -294,6 +288,7 @@ export function TaskBoard({
               epics={epics}
               userStories={userStories}
               onChangeTitle={(title) => updateTask(selectedTask.id, { title })}
+              onChangeState={(state) => moveTask(selectedTask.id, state)}
               onChangePriority={(priority) =>
                 updateTask(selectedTask.id, { priority })
               }
