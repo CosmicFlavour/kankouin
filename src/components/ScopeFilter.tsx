@@ -3,7 +3,6 @@ import { ChevronDownIcon } from "lucide-react";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -30,11 +29,9 @@ interface ScopeFilterProps {
   epics: Epic[];
   epicsLoading: boolean;
   epicsError: string | null;
-  onCreateEpic: (title: string) => Promise<unknown>;
   userStories: UserStory[];
   storiesLoading: boolean;
   storiesError: string | null;
-  onCreateUserStory: (title: string, epicId: string | null) => Promise<unknown>;
 }
 
 export function ScopeFilter({
@@ -43,20 +40,11 @@ export function ScopeFilter({
   epics,
   epicsLoading,
   epicsError,
-  onCreateEpic,
   userStories,
   storiesLoading,
   storiesError,
-  onCreateUserStory,
 }: ScopeFilterProps) {
   const [open, setOpen] = useState(false);
-  const [newEpicTitle, setNewEpicTitle] = useState("");
-  const [epicCreateError, setEpicCreateError] = useState<string | null>(null);
-  const [newStoryTitle, setNewStoryTitle] = useState("");
-  const [newStoryEpicId, setNewStoryEpicId] = useState("");
-  const [storyCreateError, setStoryCreateError] = useState<string | null>(
-    null,
-  );
 
   function isSelected(type: "epic" | "story", id: string) {
     return scope?.type === type && scope.id === id;
@@ -65,30 +53,6 @@ export function ScopeFilter({
   function selectScope(next: TaskScope) {
     onScopeChange(next);
     setOpen(false);
-  }
-
-  async function handleCreateEpic(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newEpicTitle.trim()) return;
-    try {
-      await onCreateEpic(newEpicTitle.trim());
-      setNewEpicTitle("");
-      setEpicCreateError(null);
-    } catch (err) {
-      setEpicCreateError(String(err));
-    }
-  }
-
-  async function handleCreateStory(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newStoryTitle.trim()) return;
-    try {
-      await onCreateUserStory(newStoryTitle.trim(), newStoryEpicId || null);
-      setNewStoryTitle("");
-      setStoryCreateError(null);
-    } catch (err) {
-      setStoryCreateError(String(err));
-    }
   }
 
   const unassignedStories = userStories.filter((s) => !s.epic_id);
@@ -176,51 +140,6 @@ export function ScopeFilter({
               </button>
             ))}
         </div>
-
-        <form
-          onSubmit={handleCreateEpic}
-          className="flex flex-col gap-1 border-t border-border pt-2"
-        >
-          <Input
-            value={newEpicTitle}
-            onChange={(e) => setNewEpicTitle(e.target.value)}
-            placeholder="New epic"
-            className="h-8"
-          />
-          <Button type="submit" size="sm" variant="outline">
-            Add epic
-          </Button>
-          {epicCreateError && (
-            <p className="text-destructive">{epicCreateError}</p>
-          )}
-        </form>
-
-        <form onSubmit={handleCreateStory} className="flex flex-col gap-1">
-          <Input
-            value={newStoryTitle}
-            onChange={(e) => setNewStoryTitle(e.target.value)}
-            placeholder="New user story"
-            className="h-8"
-          />
-          <select
-            value={newStoryEpicId}
-            onChange={(e) => setNewStoryEpicId(e.target.value)}
-            className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-          >
-            <option value="">No epic</option>
-            {epics.map((epic) => (
-              <option key={epic.id} value={epic.id}>
-                {epic.title}
-              </option>
-            ))}
-          </select>
-          <Button type="submit" size="sm" variant="outline">
-            Add user story
-          </Button>
-          {storyCreateError && (
-            <p className="text-destructive">{storyCreateError}</p>
-          )}
-        </form>
       </PopoverContent>
     </Popover>
   );

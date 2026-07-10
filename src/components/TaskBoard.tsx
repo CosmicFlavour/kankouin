@@ -6,15 +6,18 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
+import { PlusIcon } from "lucide-react";
 import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { TaskColumn } from "@/components/TaskColumn";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { ScopeFilter, type TaskScope } from "@/components/ScopeFilter";
+import { NewTaskDialog } from "@/components/NewTaskDialog";
+import { NewUserStoryDialog } from "@/components/NewUserStoryDialog";
+import { NameDialog } from "@/components/NameDialog";
 
 interface TaskBoardProps {
   projectId: string;
@@ -83,8 +86,6 @@ export function TaskBoard({
     setTaskTags,
     setTaskParent,
   } = useTasks(projectId);
-  const [title, setTitle] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
@@ -106,21 +107,6 @@ export function TaskBoard({
     onFocusHandled?.();
   }, [focusTaskId, allTasks, onFocusHandled]);
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return;
-    try {
-      await createTask(title.trim(), {
-        epicId: scope?.type === "epic" ? scope.id : null,
-        userStoryId: scope?.type === "story" ? scope.id : null,
-      });
-      setTitle("");
-      setCreateError(null);
-    } catch (err) {
-      setCreateError(String(err));
-    }
-  }
-
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
@@ -140,18 +126,48 @@ export function TaskBoard({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start gap-4">
-        <form onSubmit={handleCreate} className="flex max-w-sm flex-1 flex-col gap-2">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="New task title"
-          />
-          <Button type="submit">Create task</Button>
-          {createError && (
-            <p className="text-sm text-destructive">{createError}</p>
-          )}
-        </form>
+      <div className="flex items-center gap-3">
+        <NewTaskDialog
+          trigger={
+            <Button
+              type="button"
+              size="icon-lg"
+              className="size-14 shrink-0 rounded-full"
+              title="New task"
+            >
+              <PlusIcon className="size-6" />
+            </Button>
+          }
+          onCreate={(fields) =>
+            createTask(fields, {
+              epicId: scope?.type === "epic" ? scope.id : null,
+              userStoryId: scope?.type === "story" ? scope.id : null,
+            })
+          }
+        />
+
+        <NewUserStoryDialog
+          trigger={
+            <Button type="button" variant="outline" size="lg">
+              <PlusIcon /> User Story
+            </Button>
+          }
+          epics={epics}
+          defaultEpicId={scope?.type === "epic" ? scope.id : null}
+          onCreate={onCreateUserStory}
+        />
+
+        <NameDialog
+          trigger={
+            <Button type="button" variant="outline" size="lg">
+              <PlusIcon /> Epic
+            </Button>
+          }
+          title="New epic"
+          placeholder="Epic title"
+          submitLabel="Create epic"
+          onSubmit={onCreateEpic}
+        />
 
         <ScopeFilter
           scope={scope}
@@ -159,11 +175,9 @@ export function TaskBoard({
           epics={epics}
           epicsLoading={epicsLoading}
           epicsError={epicsError}
-          onCreateEpic={onCreateEpic}
           userStories={userStories}
           storiesLoading={storiesLoading}
           storiesError={storiesError}
-          onCreateUserStory={onCreateUserStory}
         />
       </div>
 
