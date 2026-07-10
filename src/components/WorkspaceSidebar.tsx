@@ -2,6 +2,7 @@ import { PlusIcon } from "lucide-react";
 import type { Workspace } from "@/hooks/useWorkspaces";
 import { NameDialog } from "@/components/NameDialog";
 import { WorkspaceTreeItem } from "@/components/WorkspaceTreeItem";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SyncPanel } from "@/components/SyncPanel";
@@ -37,7 +38,10 @@ export function WorkspaceSidebar({
 }: WorkspaceSidebarProps) {
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border p-4">
-      <h1 className="text-lg font-semibold">Kankouin</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold">Kankouin</h1>
+        <ThemeToggle />
+      </div>
 
       <nav className="mt-6 flex flex-col gap-1">
         <button
