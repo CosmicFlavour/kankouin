@@ -90,14 +90,21 @@ export function TaskDetailPanel({
     }
   }
 
-  async function handleSaveTitle(e: React.FormEvent) {
-    e.preventDefault();
-    if (!titleDraft.trim()) return;
+  async function saveTitleIfChanged() {
+    const trimmed = titleDraft.trim();
+    if (!trimmed || trimmed === task.title) return;
     try {
-      await onChangeTitle(titleDraft.trim());
+      await onChangeTitle(trimmed);
       setTitleError(null);
     } catch (err) {
       setTitleError(String(err));
+    }
+  }
+
+  function handleTitleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur();
     }
   }
 
@@ -110,8 +117,8 @@ export function TaskDetailPanel({
     }
   }
 
-  async function handleSaveDescription(e: React.FormEvent) {
-    e.preventDefault();
+  async function saveDescriptionIfChanged() {
+    if (descriptionDraft === (task.description ?? "")) return;
     try {
       await onChangeDescription(descriptionDraft);
       setDescriptionError(null);
@@ -146,19 +153,16 @@ export function TaskDetailPanel({
       <dl className="flex flex-col gap-3 text-sm">
         <div>
           <dt className="text-muted-foreground">Title</dt>
-          <dd>
-            <form onSubmit={handleSaveTitle} className="mt-1 flex flex-col gap-2">
-              <Input
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-              />
-              <Button type="submit" size="sm" variant="outline">
-                Save title
-              </Button>
-              {titleError && (
-                <p className="text-sm text-destructive">{titleError}</p>
-              )}
-            </form>
+          <dd className="mt-1">
+            <Input
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitleIfChanged}
+              onKeyDown={handleTitleKeyDown}
+            />
+            {titleError && (
+              <p className="mt-1 text-sm text-destructive">{titleError}</p>
+            )}
           </dd>
         </div>
         <div>
@@ -186,21 +190,17 @@ export function TaskDetailPanel({
         </div>
         <div>
           <dt className="text-muted-foreground">Description</dt>
-          <dd>
-            <form onSubmit={handleSaveDescription} className="mt-1 flex flex-col gap-2">
-              <Textarea
-                value={descriptionDraft}
-                onChange={(e) => setDescriptionDraft(e.target.value)}
-                placeholder="No description"
-                rows={4}
-              />
-              <Button type="submit" size="sm" variant="outline">
-                Save description
-              </Button>
-              {descriptionError && (
-                <p className="text-sm text-destructive">{descriptionError}</p>
-              )}
-            </form>
+          <dd className="mt-1">
+            <Textarea
+              value={descriptionDraft}
+              onChange={(e) => setDescriptionDraft(e.target.value)}
+              onBlur={saveDescriptionIfChanged}
+              placeholder="No description"
+              rows={4}
+            />
+            {descriptionError && (
+              <p className="mt-1 text-sm text-destructive">{descriptionError}</p>
+            )}
           </dd>
         </div>
         <div>
