@@ -8,6 +8,7 @@ import {
 } from "@dnd-kit/core";
 import { PlusIcon } from "lucide-react";
 import { useTasks, type TaskSummary } from "@/hooks/useTasks";
+import { useTags } from "@/hooks/useTags";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { TaskColumn } from "@/components/TaskColumn";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { ScopeFilter, type TaskScope } from "@/components/ScopeFilter";
+import { TagFilter } from "@/components/TagFilter";
 import { NewUserStoryDialog } from "@/components/NewUserStoryDialog";
 import { NameDialog } from "@/components/NameDialog";
 
@@ -123,13 +125,23 @@ export function TaskBoard({
     setTaskTags,
     setTaskParent,
   } = useTasks(projectId);
+  const { tags, loading: tagsLoading, error: tagsError } = useTags(workspaceId);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
-  const tasks = allTasks.filter((t) =>
-    taskMatchesScope(t, scope, userStories),
-  );
+  useEffect(() => {
+    setSelectedTagIds([]);
+  }, [projectId]);
+
+  const tasks = allTasks
+    .filter((t) => taskMatchesScope(t, scope, userStories))
+    .filter(
+      (t) =>
+        selectedTagIds.length === 0 ||
+        t.tags.some((tag) => selectedTagIds.includes(tag.id)),
+    );
   // Detail panel stays open for a task even if it falls outside the current
   // scope filter (e.g. it was opened before the scope changed).
   const selectedTask = allTasks.find((t) => t.id === selectedTaskId);
@@ -216,6 +228,14 @@ export function TaskBoard({
           userStories={userStories}
           storiesLoading={storiesLoading}
           storiesError={storiesError}
+        />
+
+        <TagFilter
+          tags={tags}
+          loading={tagsLoading}
+          error={tagsError}
+          selectedTagIds={selectedTagIds}
+          onChange={setSelectedTagIds}
         />
       </div>
 
