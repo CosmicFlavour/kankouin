@@ -2,11 +2,10 @@ import { useState } from "react";
 import type { Tag, TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
-import { FUZZY_BUCKETS } from "@/lib/deadline";
+import { FUZZY_BUCKETS, fuzzyBucketClassName } from "@/lib/deadline";
 import { priorityButtonClassName } from "@/lib/priority";
 import { TASK_STATES } from "@/lib/taskState";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -57,14 +56,6 @@ export function TaskDetailPanel({
   );
   const [descriptionError, setDescriptionError] = useState<string | null>(
     null,
-  );
-  const [deadlineType, setDeadlineType] = useState<"exact" | "fuzzy">(
-    task.deadline_type === "fuzzy" ? "fuzzy" : "exact",
-  );
-  const [deadlineValue, setDeadlineValue] = useState(
-    task.deadline_type === "fuzzy"
-      ? (task.fuzzy_bucket ?? FUZZY_BUCKETS[0].value)
-      : (task.exact_date ?? ""),
   );
   const [deadlineError, setDeadlineError] = useState<string | null>(null);
   const [parentError, setParentError] = useState<string | null>(null);
@@ -144,17 +135,20 @@ export function TaskDetailPanel({
     }
   }
 
-  function handleDeadlineTypeChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const nextType = e.target.value as "exact" | "fuzzy";
-    setDeadlineType(nextType);
-    setDeadlineValue(nextType === "fuzzy" ? FUZZY_BUCKETS[0].value : "");
+  async function handleFuzzyBucketClick(bucket: string) {
+    if (task.deadline_type === "fuzzy" && task.fuzzy_bucket === bucket) return;
+    try {
+      await onChangeDeadline("fuzzy", bucket);
+      setDeadlineError(null);
+    } catch (err) {
+      setDeadlineError(String(err));
+    }
   }
 
-  async function handleSaveDeadline(e: React.FormEvent) {
-    e.preventDefault();
-    if (!deadlineValue) return;
+  async function handleExactDateChange(value: string) {
+    if (!value) return;
     try {
-      await onChangeDeadline(deadlineType, deadlineValue);
+      await onChangeDeadline("exact", value);
       setDeadlineError(null);
     } catch (err) {
       setDeadlineError(String(err));
@@ -249,42 +243,34 @@ export function TaskDetailPanel({
         </div>
         <div>
           <dt className="text-muted-foreground">Deadline</dt>
-          <dd>
-            <form onSubmit={handleSaveDeadline} className="mt-1 flex flex-col gap-2">
-              <select
-                value={deadlineType}
-                onChange={handleDeadlineTypeChange}
-                className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-              >
-                <option value="exact">Exact date</option>
-                <option value="fuzzy">Fuzzy</option>
-              </select>
-              {deadlineType === "exact" ? (
-                <Input
-                  type="date"
-                  value={deadlineValue}
-                  onChange={(e) => setDeadlineValue(e.target.value)}
-                />
-              ) : (
-                <select
-                  value={deadlineValue}
-                  onChange={(e) => setDeadlineValue(e.target.value)}
-                  className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+          <dd className="mt-1 flex flex-col gap-2">
+            <div className="inline-flex w-fit overflow-hidden rounded-md border border-border">
+              {FUZZY_BUCKETS.map((bucket, i) => (
+                <button
+                  key={bucket.value}
+                  type="button"
+                  onClick={() => handleFuzzyBucketClick(bucket.value)}
+                  className={cn(
+                    "px-3 py-1 text-sm transition-colors",
+                    i > 0 && "border-l border-border",
+                    task.deadline_type === "fuzzy" &&
+                      task.fuzzy_bucket === bucket.value
+                      ? fuzzyBucketClassName(bucket.value)
+                      : "text-muted-foreground hover:bg-muted",
+                  )}
                 >
-                  {FUZZY_BUCKETS.map((bucket) => (
-                    <option key={bucket.value} value={bucket.value}>
-                      {bucket.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <Button type="submit" size="sm" variant="outline">
-                Save deadline
-              </Button>
-              {deadlineError && (
-                <p className="text-sm text-destructive">{deadlineError}</p>
-              )}
-            </form>
+                  {bucket.label}
+                </button>
+              ))}
+            </div>
+            <Input
+              type="date"
+              value={task.deadline_type === "exact" ? (task.exact_date ?? "") : ""}
+              onChange={(e) => handleExactDateChange(e.target.value)}
+            />
+            {deadlineError && (
+              <p className="text-sm text-destructive">{deadlineError}</p>
+            )}
           </dd>
         </div>
         <div>
