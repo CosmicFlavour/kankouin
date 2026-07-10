@@ -11,13 +11,50 @@ import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TaskColumn } from "@/components/TaskColumn";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { ScopeFilter, type TaskScope } from "@/components/ScopeFilter";
-import { NewTaskDialog } from "@/components/NewTaskDialog";
 import { NewUserStoryDialog } from "@/components/NewUserStoryDialog";
 import { NameDialog } from "@/components/NameDialog";
+
+function CreateTaskForm({
+  onCreate,
+}: {
+  onCreate: (title: string) => Promise<void>;
+}) {
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    try {
+      await onCreate(title.trim());
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>New task</DialogTitle>
+      </DialogHeader>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <Input
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Task title"
+        />
+        <Button type="submit">Create task</Button>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </form>
+    </>
+  );
+}
 
 interface TaskBoardProps {
   projectId: string;
@@ -88,6 +125,7 @@ export function TaskBoard({
   } = useTasks(projectId);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [creatingTask, setCreatingTask] = useState(false);
 
   const tasks = allTasks.filter((t) =>
     taskMatchesScope(t, scope, userStories),
@@ -95,6 +133,15 @@ export function TaskBoard({
   // Detail panel stays open for a task even if it falls outside the current
   // scope filter (e.g. it was opened before the scope changed).
   const selectedTask = allTasks.find((t) => t.id === selectedTaskId);
+  // Create and edit share one Dialog instance (content swaps in place)
+  // rather than closing one Dialog and opening another, which can race with
+  // Radix's dismiss-on-outside-interaction handling.
+  const taskDialogOpen = creatingTask || !!selectedTask;
+
+  function closeTaskDialog() {
+    setCreatingTask(false);
+    setSelectedTaskId(null);
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -127,24 +174,15 @@ export function TaskBoard({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <NewTaskDialog
-          trigger={
-            <Button
-              type="button"
-              size="icon-lg"
-              className="size-14 shrink-0 rounded-full"
-              title="New task"
-            >
-              <PlusIcon className="size-6" />
-            </Button>
-          }
-          onCreate={(fields) =>
-            createTask(fields, {
-              epicId: scope?.type === "epic" ? scope.id : null,
-              userStoryId: scope?.type === "story" ? scope.id : null,
-            })
-          }
-        />
+        <Button
+          type="button"
+          size="icon-lg"
+          className="size-14 shrink-0 rounded-full"
+          title="New task"
+          onClick={() => setCreatingTask(true)}
+        >
+          <PlusIcon className="size-6" />
+        </Button>
 
         <NewUserStoryDialog
           trigger={
@@ -208,12 +246,26 @@ export function TaskBoard({
       )}
 
       <Dialog
-        open={!!selectedTask}
+        open={taskDialogOpen}
         onOpenChange={(open) => {
-          if (!open) setSelectedTaskId(null);
+          if (!open) closeTaskDialog();
         }}
       >
         <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+          {creatingTask && !selectedTask && (
+            <CreateTaskForm
+              onCreate={async (title) => {
+                const created = await createTask(title, {
+                  epicId: scope?.type === "epic" ? scope.id : null,
+                  userStoryId: scope?.type === "story" ? scope.id : null,
+                });
+                if (created) {
+                  setCreatingTask(false);
+                  setSelectedTaskId(created.id);
+                }
+              }}
+            />
+          )}
           {selectedTask && (
             <TaskDetailPanel
               key={selectedTask.id}

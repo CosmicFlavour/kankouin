@@ -64,21 +64,23 @@ export function useTasks(projectId: string | null) {
   }, [projectId]);
 
   async function createTask(
-    fields: { title: string; description?: string | null; priority?: string },
+    title: string,
     attachment?: { epicId?: string | null; userStoryId?: string | null },
   ) {
     if (!projectId) return;
     const created = await invoke<Task>("create_task", {
       projectId,
-      title: fields.title,
-      description: fields.description ?? null,
+      title,
+      description: null,
       epicId: attachment?.epicId ?? null,
       userStoryId: attachment?.userStoryId ?? null,
-      priority: fields.priority ?? null,
+      priority: null,
     });
     // A freshly created task has no tags yet and can't be blocked (no
     // dependency has had a chance to be set), so this is exact, not a guess.
-    setTasks((prev) => [...prev, { ...created, tags: [], blocked: false }]);
+    const summary: TaskSummary = { ...created, tags: [], blocked: false };
+    setTasks((prev) => [...prev, summary]);
+    return summary;
   }
 
   async function moveTask(taskId: string, newState: string) {
