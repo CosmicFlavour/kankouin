@@ -1,20 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Mock } from "vitest";
-import { open, save, confirm } from "@tauri-apps/plugin-dialog";
 import { SyncPanel } from "./SyncPanel";
-import { mockInvoke, mockCommands } from "@/test/tauriMock";
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-  open: vi.fn(),
-  save: vi.fn(),
-  confirm: vi.fn(),
-}));
-
-const mockOpen = open as unknown as Mock;
-const mockSave = save as unknown as Mock;
-const mockConfirm = confirm as unknown as Mock;
+import {
+  mockInvoke,
+  mockCommands,
+  mockOpen,
+  mockSave,
+  mockConfirm,
+} from "@/test/tauriMock";
 
 // Every test starts from the same baseline: settings load with no prior
 // sync file, and setLastSyncFilePath's own invoke call succeeds.

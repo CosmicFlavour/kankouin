@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ChevronRightIcon, PlusIcon } from "lucide-react";
+import { ChevronRightIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { useProjects } from "@/hooks/useProjects";
 import type { Workspace } from "@/hooks/useWorkspaces";
 import { NameDialog } from "@/components/NameDialog";
@@ -12,6 +13,7 @@ interface WorkspaceTreeItemProps {
   selectedProjectId: string | null;
   onSelectWorkspace: () => void;
   onSelectProject: (projectId: string) => void;
+  onDeleteWorkspace: (workspaceId: string) => Promise<void>;
 }
 
 export function WorkspaceTreeItem({
@@ -20,11 +22,27 @@ export function WorkspaceTreeItem({
   selectedProjectId,
   onSelectWorkspace,
   onSelectProject,
+  onDeleteWorkspace,
 }: WorkspaceTreeItemProps) {
   const [expanded, setExpanded] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { projects, loading, error, createProject } = useProjects(
     workspace.id,
   );
+
+  async function handleDelete() {
+    setDeleteError(null);
+    const confirmed = await confirm(
+      `Delete "${workspace.name}" and everything in it? This permanently deletes all its projects, epics, stories and tasks. This can't be undone.`,
+      { title: "Delete workspace?", kind: "warning" },
+    );
+    if (!confirmed) return;
+    try {
+      await onDeleteWorkspace(workspace.id);
+    } catch (err) {
+      setDeleteError(String(err));
+    }
+  }
 
   return (
     <div className="flex flex-col">
@@ -70,7 +88,20 @@ export function WorkspaceTreeItem({
           submitLabel="Create project"
           onSubmit={createProject}
         />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="opacity-0 group-hover:opacity-100"
+          onClick={handleDelete}
+        >
+          <Trash2Icon />
+          <span className="sr-only">Delete workspace</span>
+        </Button>
       </div>
+      {deleteError && (
+        <p className="px-2 text-xs text-destructive">{deleteError}</p>
+      )}
 
       {expanded && (
         <div className="ml-4 flex flex-col gap-0.5">

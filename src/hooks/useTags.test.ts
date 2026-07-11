@@ -43,4 +43,21 @@ describe("useTags", () => {
       color: "red",
     });
   });
+
+  it("deleteTag removes the tag from local state", async () => {
+    mockCommands({
+      list_tags: () => [tag],
+      delete_tag: () => undefined,
+    });
+
+    const { result } = renderHook(() => useTags("ws-1"));
+    await waitFor(() => expect(result.current.tags).toEqual([tag]));
+
+    await act(async () => {
+      await result.current.deleteTag("tag-1");
+    });
+
+    expect(result.current.tags).toEqual([]);
+    expect(mockInvoke).toHaveBeenCalledWith("delete_tag", { id: "tag-1" });
+  });
 });

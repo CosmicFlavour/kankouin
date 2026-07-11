@@ -9,6 +9,17 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
+// Several components (SyncPanel, and now every delete/archive confirmation)
+// gate a destructive action behind the native confirm dialog. Mocking it
+// here means a test that doesn't care about it gets the safe default
+// (confirm() resolves to undefined, i.e. "cancelled") instead of hitting a
+// real Tauri plugin that doesn't exist in jsdom.
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
+  save: vi.fn(),
+  confirm: vi.fn(),
+}));
+
 // jsdom doesn't implement matchMedia; useSettings reads it as the dark-mode
 // fallback when no theme is stored yet. Defaults to "no preference" (light);
 // individual tests can override with vi.spyOn(window, "matchMedia").

@@ -1,9 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open, save, confirm } from "@tauri-apps/plugin-dialog";
 import type { Mock } from "vitest";
 
-// `@tauri-apps/api/core` is replaced with a `vi.fn()` in src/test/setup.ts;
-// this cast just gives tests the mock's assertion/config methods back.
+// Both modules are replaced with vi.fn()s in src/test/setup.ts; these casts
+// just give tests the mocks' assertion/config methods back.
 export const mockInvoke = invoke as unknown as Mock;
+export const mockOpen = open as unknown as Mock;
+export const mockSave = save as unknown as Mock;
+export const mockConfirm = confirm as unknown as Mock;
 
 type CommandHandler = (args?: Record<string, unknown>) => unknown;
 

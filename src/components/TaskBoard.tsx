@@ -68,10 +68,12 @@ interface TaskBoardProps {
   epicsLoading: boolean;
   epicsError: string | null;
   onCreateEpic: (title: string) => Promise<unknown>;
+  onDeleteEpic: (epicId: string) => Promise<void>;
   userStories: UserStory[];
   storiesLoading: boolean;
   storiesError: string | null;
   onCreateUserStory: (title: string, epicId: string | null) => Promise<unknown>;
+  onDeleteUserStory: (storyId: string) => Promise<void>;
   focusTaskId?: string | null;
   onFocusHandled?: () => void;
 }
@@ -101,10 +103,12 @@ export function TaskBoard({
   epicsLoading,
   epicsError,
   onCreateEpic,
+  onDeleteEpic,
   userStories,
   storiesLoading,
   storiesError,
   onCreateUserStory,
+  onDeleteUserStory,
   focusTaskId,
   onFocusHandled,
 }: TaskBoardProps) {
@@ -118,6 +122,8 @@ export function TaskBoard({
     setDeadline,
     setTaskTags,
     setTaskParent,
+    archiveTask,
+    deleteTask,
   } = useTasks(projectId);
   const { tags, loading: tagsLoading, error: tagsError } = useTags(workspaceId);
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -147,6 +153,16 @@ export function TaskBoard({
   function closeTaskDialog() {
     setCreatingTask(false);
     setSelectedTaskId(null);
+  }
+
+  async function handleDeleteEpic(epicId: string) {
+    await onDeleteEpic(epicId);
+    if (scope?.type === "epic" && scope.id === epicId) onScopeChange(null);
+  }
+
+  async function handleDeleteUserStory(storyId: string) {
+    await onDeleteUserStory(storyId);
+    if (scope?.type === "story" && scope.id === storyId) onScopeChange(null);
   }
 
   const sensors = useSensors(
@@ -219,9 +235,11 @@ export function TaskBoard({
           epics={epics}
           epicsLoading={epicsLoading}
           epicsError={epicsError}
+          onDeleteEpic={handleDeleteEpic}
           userStories={userStories}
           storiesLoading={storiesLoading}
           storiesError={storiesError}
+          onDeleteUserStory={handleDeleteUserStory}
         />
 
         <TagFilter
@@ -304,6 +322,14 @@ export function TaskBoard({
               onChangeParent={(epicId, userStoryId) =>
                 setTaskParent(selectedTask.id, epicId, userStoryId)
               }
+              onArchive={async () => {
+                await archiveTask(selectedTask.id);
+                closeTaskDialog();
+              }}
+              onDelete={async () => {
+                await deleteTask(selectedTask.id);
+                closeTaskDialog();
+              }}
             />
           )}
         </DialogContent>

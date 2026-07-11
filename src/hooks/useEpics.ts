@@ -52,5 +52,14 @@ export function useEpics(projectId: string | null) {
     return created;
   }
 
-  return { epics, loading, error, createEpic };
+  // Hard delete, but non-destructive to tasks: the backend only cascades
+  // away the epic and its user stories — any task attached to either gets
+  // unlinked back to the bare project (epic_id/user_story_id -> NULL) rather
+  // than deleted (see migrations/0001_init.sql).
+  async function deleteEpic(epicId: string) {
+    await invoke("delete_epic", { id: epicId });
+    setEpics((prev) => prev.filter((e) => e.id !== epicId));
+  }
+
+  return { epics, loading, error, createEpic, deleteEpic };
 }

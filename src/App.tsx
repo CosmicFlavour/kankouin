@@ -7,7 +7,8 @@ import { TodayView } from "@/components/TodayView";
 import { DailyReviewDialog } from "@/components/DailyReviewDialog";
 
 function App() {
-  const { workspaces, loading, error, createWorkspace } = useWorkspaces();
+  const { workspaces, loading, error, createWorkspace, deleteWorkspace } =
+    useWorkspaces();
   const { tasks: staleTasks, loading: staleLoading, refresh: refreshStale } =
     useStaleTasks();
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
@@ -49,6 +50,13 @@ function App() {
           setSelectedWorkspaceId(workspaceId);
           setSelectedProjectId(projectId);
         }}
+        onDeleteWorkspace={async (workspaceId) => {
+          await deleteWorkspace(workspaceId);
+          if (workspaceId === selectedWorkspaceId) {
+            setSelectedWorkspaceId(null);
+            setSelectedProjectId(null);
+          }
+        }}
         showToday={showToday}
         onSelectToday={() => setShowToday(true)}
         staleCount={staleTasks.length}
@@ -81,6 +89,7 @@ function App() {
             projectId={selectedProjectId}
             focusTaskId={focusTaskId}
             onFocusHandled={() => setFocusTaskId(null)}
+            onArchived={() => setSelectedProjectId(null)}
           />
         )}
       </main>

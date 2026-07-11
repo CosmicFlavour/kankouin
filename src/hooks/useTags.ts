@@ -44,5 +44,14 @@ export function useTags(workspaceId: string | null) {
     return created;
   }
 
-  return { tags, loading, error, createTag };
+  // Hard delete: removes the tag and every task's association with it.
+  // Tasks already loaded elsewhere (e.g. a board's cached task list) may
+  // keep a stale copy of this tag on their `tags` array until they next
+  // refetch — cosmetic only, and self-corrects on the next list_tasks call.
+  async function deleteTag(tagId: string) {
+    await invoke("delete_tag", { id: tagId });
+    setTags((prev) => prev.filter((t) => t.id !== tagId));
+  }
+
+  return { tags, loading, error, createTag, deleteTag };
 }

@@ -43,5 +43,12 @@ export function useWorkspaces() {
     setWorkspaces((prev) => [...prev, created]);
   }
 
-  return { workspaces, loading, error, createWorkspace };
+  // Hard delete: cascades to every project, epic, story, task and tag in
+  // the workspace (see migrations/0001_init.sql). There is no undo.
+  async function deleteWorkspace(workspaceId: string) {
+    await invoke("delete_workspace", { id: workspaceId });
+    setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
+  }
+
+  return { workspaces, loading, error, createWorkspace, deleteWorkspace };
 }

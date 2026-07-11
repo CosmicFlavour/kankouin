@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Tag, TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
@@ -12,6 +13,7 @@ import { TASK_STATES } from "@/lib/taskState";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SubtaskSection } from "@/components/SubtaskSection";
 import { TagSection } from "@/components/TagSection";
@@ -37,6 +39,8 @@ interface TaskDetailPanelProps {
     epicId: string | null,
     userStoryId: string | null,
   ) => Promise<void>;
+  onArchive: () => Promise<void>;
+  onDelete: () => Promise<void>;
 }
 
 export function TaskDetailPanel({
@@ -51,11 +55,14 @@ export function TaskDetailPanel({
   onChangeDeadline,
   onChangeTags,
   onChangeParent,
+  onArchive,
+  onDelete,
 }: TaskDetailPanelProps) {
   const [titleDraft, setTitleDraft] = useState(task.title);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [stateError, setStateError] = useState<string | null>(null);
   const [priorityError, setPriorityError] = useState<string | null>(null);
+  const [dangerError, setDangerError] = useState<string | null>(null);
   const [descriptionDraft, setDescriptionDraft] = useState(
     task.description ?? "",
   );
@@ -181,6 +188,34 @@ export function TaskDetailPanel({
     const trimmed = exactDateDraft.trim();
     if (!trimmed) return;
     await commitExactDate(trimmed);
+  }
+
+  async function handleArchive() {
+    setDangerError(null);
+    const confirmed = await confirm(
+      `Archive "${task.title}"? It will be hidden from the board. This can be changed later.`,
+      { title: "Archive task?", kind: "warning" },
+    );
+    if (!confirmed) return;
+    try {
+      await onArchive();
+    } catch (err) {
+      setDangerError(String(err));
+    }
+  }
+
+  async function handleDelete() {
+    setDangerError(null);
+    const confirmed = await confirm(
+      `Permanently delete "${task.title}"? Its subtasks, notes and tags will be deleted too. This can't be undone.`,
+      { title: "Delete task?", kind: "warning" },
+    );
+    if (!confirmed) return;
+    try {
+      await onDelete();
+    } catch (err) {
+      setDangerError(String(err));
+    }
   }
 
   return (
@@ -350,6 +385,18 @@ export function TaskDetailPanel({
       </dl>
 
       <SubtaskSection taskId={task.id} />
+
+      <div className="flex items-center gap-2 border-t border-border pt-4">
+        <Button type="button" variant="outline" size="sm" onClick={handleArchive}>
+          Archive
+        </Button>
+        <Button type="button" variant="destructive" size="sm" onClick={handleDelete}>
+          Delete
+        </Button>
+        {dangerError && (
+          <p className="text-sm text-destructive">{dangerError}</p>
+        )}
+      </div>
     </div>
   );
 }

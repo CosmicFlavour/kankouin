@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TaskDetailPanel } from "./TaskDetailPanel";
 import { Dialog } from "@/components/ui/dialog";
-import { mockCommands } from "@/test/tauriMock";
+import { mockCommands, mockConfirm } from "@/test/tauriMock";
 import { makeTask, makeEpic, makeUserStory } from "@/test/factories";
 import type { TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
@@ -18,6 +18,8 @@ function makeHandlers() {
     onChangeDeadline: vi.fn().mockResolvedValue(undefined),
     onChangeTags: vi.fn().mockResolvedValue(undefined),
     onChangeParent: vi.fn().mockResolvedValue(undefined),
+    onArchive: vi.fn().mockResolvedValue(undefined),
+    onDelete: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -315,5 +317,71 @@ describe("TaskDetailPanel — blocked indicator", () => {
   it("does not show a blocked indicator otherwise", () => {
     renderPanel({ blocked: false });
     expect(screen.queryByText("Blocked by another task")).not.toBeInTheDocument();
+  });
+});
+
+describe("TaskDetailPanel — archive and delete", () => {
+  it("archiving calls onArchive only after the user confirms", async () => {
+    const user = userEvent.setup();
+    const { handlers } = renderPanel();
+    mockConfirm.mockResolvedValue(true);
+
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(mockConfirm).toHaveBeenCalled();
+    expect(handlers.onArchive).toHaveBeenCalled();
+  });
+
+  it("declining the archive confirmation does not call onArchive", async () => {
+    const user = userEvent.setup();
+    const { handlers } = renderPanel();
+    mockConfirm.mockResolvedValue(false);
+
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(handlers.onArchive).not.toHaveBeenCalled();
+  });
+
+  it("shows an error when archiving fails", async () => {
+    const user = userEvent.setup();
+    const { handlers } = renderPanel();
+    handlers.onArchive.mockRejectedValue(new Error("boom"));
+    mockConfirm.mockResolvedValue(true);
+
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(await screen.findByText("Error: boom")).toBeInTheDocument();
+  });
+
+  it("deleting calls onDelete only after the user confirms", async () => {
+    const user = userEvent.setup();
+    const { handlers } = renderPanel();
+    mockConfirm.mockResolvedValue(true);
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(mockConfirm).toHaveBeenCalled();
+    expect(handlers.onDelete).toHaveBeenCalled();
+  });
+
+  it("declining the delete confirmation does not call onDelete", async () => {
+    const user = userEvent.setup();
+    const { handlers } = renderPanel();
+    mockConfirm.mockResolvedValue(false);
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(handlers.onDelete).not.toHaveBeenCalled();
+  });
+
+  it("shows an error when deleting fails", async () => {
+    const user = userEvent.setup();
+    const { handlers } = renderPanel();
+    handlers.onDelete.mockRejectedValue(new Error("boom"));
+    mockConfirm.mockResolvedValue(true);
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("Error: boom")).toBeInTheDocument();
   });
 });

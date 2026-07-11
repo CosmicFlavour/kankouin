@@ -54,4 +54,21 @@ describe("useWorkspaces", () => {
       icon: null,
     });
   });
+
+  it("deleteWorkspace removes the workspace from local state", async () => {
+    mockCommands({
+      list_workspaces: () => [workspace],
+      delete_workspace: () => undefined,
+    });
+
+    const { result } = renderHook(() => useWorkspaces());
+    await waitFor(() => expect(result.current.workspaces).toEqual([workspace]));
+
+    await act(async () => {
+      await result.current.deleteWorkspace("ws-1");
+    });
+
+    expect(result.current.workspaces).toEqual([]);
+    expect(mockInvoke).toHaveBeenCalledWith("delete_workspace", { id: "ws-1" });
+  });
 });

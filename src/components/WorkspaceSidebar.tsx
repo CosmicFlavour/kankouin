@@ -16,6 +16,7 @@ interface WorkspaceSidebarProps {
   selectedProjectId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectProject: (workspaceId: string, projectId: string) => void;
+  onDeleteWorkspace: (workspaceId: string) => Promise<void>;
   showToday: boolean;
   onSelectToday: () => void;
   staleCount: number;
@@ -31,6 +32,7 @@ export function WorkspaceSidebar({
   selectedProjectId,
   onSelectWorkspace,
   onSelectProject,
+  onDeleteWorkspace,
   showToday,
   onSelectToday,
   staleCount,
@@ -112,6 +114,7 @@ export function WorkspaceSidebar({
             onSelectProject={(projectId) =>
               onSelectProject(workspace.id, projectId)
             }
+            onDeleteWorkspace={onDeleteWorkspace}
           />
         ))}
       </nav>

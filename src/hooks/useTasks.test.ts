@@ -190,4 +190,40 @@ describe("useTasks", () => {
 
     expect(result.current.tasks[0].epic_id).toBe("epic-9");
   });
+
+  it("archiveTask removes the task from local state", async () => {
+    const task = makeTask({ id: "t1" });
+    mockCommands({
+      list_tasks: () => [task],
+      archive_task: () => undefined,
+    });
+
+    const { result } = renderHook(() => useTasks("project-1"));
+    await waitFor(() => expect(result.current.tasks).toEqual([task]));
+
+    await act(async () => {
+      await result.current.archiveTask("t1");
+    });
+
+    expect(result.current.tasks).toEqual([]);
+    expect(mockInvoke).toHaveBeenCalledWith("archive_task", { id: "t1" });
+  });
+
+  it("deleteTask removes the task from local state", async () => {
+    const task = makeTask({ id: "t1" });
+    mockCommands({
+      list_tasks: () => [task],
+      delete_task: () => undefined,
+    });
+
+    const { result } = renderHook(() => useTasks("project-1"));
+    await waitFor(() => expect(result.current.tasks).toEqual([task]));
+
+    await act(async () => {
+      await result.current.deleteTask("t1");
+    });
+
+    expect(result.current.tasks).toEqual([]);
+    expect(mockInvoke).toHaveBeenCalledWith("delete_task", { id: "t1" });
+  });
 });

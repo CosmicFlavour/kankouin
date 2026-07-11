@@ -52,5 +52,13 @@ export function useProjects(workspaceId: string | null) {
     setProjects((prev) => [...prev, created]);
   }
 
-  return { projects, loading, error, createProject };
+  // Soft delete: the backend keeps the row (archived = true) and its tasks
+  // for a possible future "restore" feature, but list_projects doesn't
+  // filter archived rows out itself, so drop it from local state here.
+  async function archiveProject(projectId: string) {
+    await invoke("archive_project", { id: projectId });
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+  }
+
+  return { projects, loading, error, createProject, archiveProject };
 }

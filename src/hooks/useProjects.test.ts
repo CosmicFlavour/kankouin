@@ -68,4 +68,21 @@ describe("useProjects", () => {
       description: null,
     });
   });
+
+  it("archiveProject removes the project from local state", async () => {
+    mockCommands({
+      list_projects: () => [project],
+      archive_project: () => undefined,
+    });
+
+    const { result } = renderHook(() => useProjects("ws-1"));
+    await waitFor(() => expect(result.current.projects).toEqual([project]));
+
+    await act(async () => {
+      await result.current.archiveProject("p1");
+    });
+
+    expect(result.current.projects).toEqual([]);
+    expect(mockInvoke).toHaveBeenCalledWith("archive_project", { id: "p1" });
+  });
 });

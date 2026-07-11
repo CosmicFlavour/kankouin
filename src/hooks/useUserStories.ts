@@ -54,5 +54,13 @@ export function useUserStories(projectId: string | null) {
     return created;
   }
 
-  return { userStories, loading, error, createUserStory };
+  // Hard delete, but non-destructive to tasks: attached tasks get unlinked
+  // (user_story_id -> NULL) rather than deleted (see
+  // migrations/0001_init.sql).
+  async function deleteUserStory(storyId: string) {
+    await invoke("delete_user_story", { id: storyId });
+    setUserStories((prev) => prev.filter((s) => s.id !== storyId));
+  }
+
+  return { userStories, loading, error, createUserStory, deleteUserStory };
 }

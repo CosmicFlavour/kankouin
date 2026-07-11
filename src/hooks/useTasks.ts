@@ -151,6 +151,20 @@ export function useTasks(projectId: string | null) {
     );
   }
 
+  // Soft delete: list_tasks filters archived rows out server-side, so drop
+  // it from local state too rather than waiting on a refetch.
+  async function archiveTask(taskId: string) {
+    await invoke("archive_task", { id: taskId });
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+  }
+
+  // Hard delete: permanent, cascades subtasks/logs/tags/dependencies (see
+  // migrations/0001_init.sql). There is no undo.
+  async function deleteTask(taskId: string) {
+    await invoke("delete_task", { id: taskId });
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+  }
+
   return {
     tasks,
     loading,
@@ -161,5 +175,7 @@ export function useTasks(projectId: string | null) {
     setDeadline,
     setTaskTags,
     setTaskParent,
+    archiveTask,
+    deleteTask,
   };
 }
