@@ -449,6 +449,17 @@ fn archive(conn: &Connection, id: String) -> AppResult<()> {
     Ok(())
 }
 
+// Unlike archive, this is a permanent, unrecoverable removal — subtasks,
+// logs, tags and dependencies all cascade away with it (see
+// migrations/0001_init.sql).
+fn delete(conn: &Connection, id: String) -> AppResult<()> {
+    let changed = conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])?;
+    if changed == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(())
+}
+
 fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
     let now = Utc::now();
     let days_from_monday = now.weekday().num_days_from_monday() as i64;
@@ -675,6 +686,12 @@ pub fn archive_task(state: State<AppState>, id: String) -> AppResult<()> {
 }
 
 #[tauri::command]
+pub fn delete_task(state: State<AppState>, id: String) -> AppResult<()> {
+    let conn = state.conn()?;
+    delete(&conn, id)
+}
+
+#[tauri::command]
 pub fn list_tasks_today(state: State<AppState>) -> AppResult<Vec<TaskSummary>> {
     let conn = state.conn()?;
     list_today(&conn)
@@ -782,6 +799,37 @@ mod tests {
 
         archive(&conn, task.id.clone()).unwrap();
         assert_eq!(list(&conn, project_id).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn delete_is_permanent_and_cascades_subtasks_and_logs() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        insert_subtask(&conn, task.id.clone(), "Sub".into()).unwrap();
+        insert_log_entry(&conn, task.id.clone(), "Note".into()).unwrap();
+
+        delete(&conn, task.id.clone()).unwrap();
+
+        assert!(matches!(
+            get_detail(&conn, task.id.clone()),
+            Err(AppError::NotFound)
+        ));
+        let subtask_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM subtasks WHERE task_id = ?1",
+                params![task.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(subtask_count, 0);
+    }
+
+    #[test]
+    fn delete_missing_task_errors() {
+        let conn = test_connection();
+        let result = delete(&conn, "does-not-exist".into());
+        assert!(matches!(result, Err(AppError::NotFound)));
     }
 
     #[test]
