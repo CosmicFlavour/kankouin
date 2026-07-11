@@ -85,4 +85,28 @@ describe("useProjects", () => {
     expect(result.current.projects).toEqual([]);
     expect(mockInvoke).toHaveBeenCalledWith("archive_project", { id: "p1" });
   });
+
+  it("re-fetches when refreshKey changes, even if workspaceId doesn't", async () => {
+    let calls = 0;
+    mockCommands({
+      list_projects: () => {
+        calls += 1;
+        return [{ ...project, name: `fetch #${calls}` }];
+      },
+    });
+
+    const { result, rerender } = renderHook(
+      ({ refreshKey }: { refreshKey: number }) => useProjects("ws-1", refreshKey),
+      { initialProps: { refreshKey: 0 } },
+    );
+    await waitFor(() =>
+      expect(result.current.projects[0]?.name).toBe("fetch #1"),
+    );
+
+    rerender({ refreshKey: 1 });
+
+    await waitFor(() =>
+      expect(result.current.projects[0]?.name).toBe("fetch #2"),
+    );
+  });
 });

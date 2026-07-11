@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRightIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { useProjects } from "@/hooks/useProjects";
+import { useArchivedProjects } from "@/hooks/useArchivedProjects";
 import type { Workspace } from "@/hooks/useWorkspaces";
 import { NameDialog } from "@/components/NameDialog";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ interface WorkspaceTreeItemProps {
   onSelectWorkspace: () => void;
   onSelectProject: (projectId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => Promise<void>;
+  projectsVersion: number;
 }
 
 export function WorkspaceTreeItem({
@@ -23,12 +25,20 @@ export function WorkspaceTreeItem({
   onSelectWorkspace,
   onSelectProject,
   onDeleteWorkspace,
+  projectsVersion,
 }: WorkspaceTreeItemProps) {
   const [expanded, setExpanded] = useState(false);
+  const [archivedOpen, setArchivedOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const { projects, loading, error, createProject } = useProjects(
     workspace.id,
+    projectsVersion,
   );
+  const {
+    archivedProjects,
+    loading: archivedLoading,
+    error: archivedError,
+  } = useArchivedProjects(archivedOpen ? workspace.id : null);
 
   async function handleDelete() {
     setDeleteError(null);
@@ -133,6 +143,49 @@ export function WorkspaceTreeItem({
               {project.name}
             </button>
           ))}
+
+          <button
+            type="button"
+            onClick={() => setArchivedOpen((prev) => !prev)}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted"
+          >
+            <ChevronRightIcon
+              className={cn(
+                "size-3 shrink-0 transition-transform",
+                archivedOpen && "rotate-90",
+              )}
+            />
+            Archived
+          </button>
+          {archivedOpen && (
+            <div className="ml-4 flex flex-col gap-0.5">
+              {archivedLoading && (
+                <p className="px-2 py-1 text-xs text-muted-foreground">
+                  Loading...
+                </p>
+              )}
+              {archivedError && (
+                <p className="px-2 py-1 text-xs text-muted-foreground">
+                  Couldn't load: {archivedError}
+                </p>
+              )}
+              {!archivedLoading &&
+                !archivedError &&
+                archivedProjects.length === 0 && (
+                  <p className="px-2 py-1 text-xs text-muted-foreground">
+                    No archived projects
+                  </p>
+                )}
+              {archivedProjects.map((project) => (
+                <p
+                  key={project.id}
+                  className="px-2 py-1 text-xs text-muted-foreground"
+                >
+                  {project.name}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -21,6 +21,7 @@ interface WorkspaceSidebarProps {
   onSelectToday: () => void;
   staleCount: number;
   onOpenDailyReview: () => void;
+  projectsVersion: number;
 }
 
 export function WorkspaceSidebar({
@@ -37,6 +38,7 @@ export function WorkspaceSidebar({
   onSelectToday,
   staleCount,
   onOpenDailyReview,
+  projectsVersion,
 }: WorkspaceSidebarProps) {
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border p-4">
@@ -115,6 +117,7 @@ export function WorkspaceSidebar({
               onSelectProject(workspace.id, projectId)
             }
             onDeleteWorkspace={onDeleteWorkspace}
+            projectsVersion={projectsVersion}
           />
         ))}
       </nav>

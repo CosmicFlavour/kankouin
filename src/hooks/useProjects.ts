@@ -11,7 +11,12 @@ export interface Project {
   updated_at: string;
 }
 
-export function useProjects(workspaceId: string | null) {
+// `refreshKey` exists because this hook is called from more than one place
+// at once (the sidebar tree and the open project's panel each hold their
+// own instance, with no shared cache) — bumping it forces a re-fetch, which
+// is how an archive triggered from one instance gets reflected in the
+// other's list. See App.tsx's projectsVersion.
+export function useProjects(workspaceId: string | null, refreshKey: unknown = null) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +45,7 @@ export function useProjects(workspaceId: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, refreshKey]);
 
   async function createProject(name: string) {
     if (!workspaceId) return;
@@ -52,9 +57,8 @@ export function useProjects(workspaceId: string | null) {
     setProjects((prev) => [...prev, created]);
   }
 
-  // Soft delete: the backend keeps the row (archived = true) and its tasks
-  // for a possible future "restore" feature, but list_projects doesn't
-  // filter archived rows out itself, so drop it from local state here.
+  // Soft delete: the backend keeps the row (archived = true) and its tasks,
+  // browsable later via list_archived_projects (see useArchivedProjects).
   async function archiveProject(projectId: string) {
     await invoke("archive_project", { id: projectId });
     setProjects((prev) => prev.filter((p) => p.id !== projectId));

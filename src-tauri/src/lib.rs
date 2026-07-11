@@ -35,6 +35,7 @@ pub fn run() {
             commands::projects::create_project,
             commands::projects::update_project,
             commands::projects::archive_project,
+            commands::projects::list_archived_projects,
             commands::epics::list_epics,
             commands::epics::create_epic,
             commands::epics::update_epic,

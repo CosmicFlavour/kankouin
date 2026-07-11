@@ -21,6 +21,10 @@ function App() {
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
   const [dailyReviewOpen, setDailyReviewOpen] = useState(false);
   const [autoOpenedReview, setAutoOpenedReview] = useState(false);
+  // ProjectPanel and the sidebar tree each hold their own useProjects
+  // instance with no shared cache; bumping this forces both to re-fetch so
+  // archiving from one is reflected in the other (see useProjects.ts).
+  const [projectsVersion, setProjectsVersion] = useState(0);
 
   const selectedWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId);
 
@@ -61,6 +65,7 @@ function App() {
         onSelectToday={() => setShowToday(true)}
         staleCount={staleTasks.length}
         onOpenDailyReview={() => setDailyReviewOpen(true)}
+        projectsVersion={projectsVersion}
       />
       <main className="flex flex-1 flex-col p-6">
         {showToday && (
@@ -89,7 +94,10 @@ function App() {
             projectId={selectedProjectId}
             focusTaskId={focusTaskId}
             onFocusHandled={() => setFocusTaskId(null)}
-            onArchived={() => setSelectedProjectId(null)}
+            onArchived={() => {
+              setSelectedProjectId(null);
+              setProjectsVersion((v) => v + 1);
+            }}
           />
         )}
       </main>

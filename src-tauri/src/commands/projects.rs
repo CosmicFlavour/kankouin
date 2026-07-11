@@ -22,7 +22,16 @@ fn row_to_project(row: &rusqlite::Row) -> rusqlite::Result<Project> {
 fn list(conn: &Connection, workspace_id: String) -> AppResult<Vec<Project>> {
     let mut stmt = conn.prepare(
         "SELECT id, workspace_id, name, description, archived, created_at, updated_at
-         FROM projects WHERE workspace_id = ?1 ORDER BY created_at ASC",
+         FROM projects WHERE workspace_id = ?1 AND archived = 0 ORDER BY created_at ASC",
+    )?;
+    let rows = stmt.query_map(params![workspace_id], row_to_project)?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+}
+
+fn list_archived(conn: &Connection, workspace_id: String) -> AppResult<Vec<Project>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, workspace_id, name, description, archived, created_at, updated_at
+         FROM projects WHERE workspace_id = ?1 AND archived = 1 ORDER BY updated_at DESC",
     )?;
     let rows = stmt.query_map(params![workspace_id], row_to_project)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
@@ -98,6 +107,15 @@ pub fn list_projects(state: State<AppState>, workspace_id: String) -> AppResult<
 }
 
 #[tauri::command]
+pub fn list_archived_projects(
+    state: State<AppState>,
+    workspace_id: String,
+) -> AppResult<Vec<Project>> {
+    let conn = state.conn()?;
+    list_archived(&conn, workspace_id)
+}
+
+#[tauri::command]
 pub fn create_project(
     state: State<AppState>,
     workspace_id: String,
@@ -168,6 +186,21 @@ mod tests {
             )
             .unwrap();
         assert_eq!(after_archive, 1);
+    }
+
+    #[test]
+    fn archived_projects_are_excluded_from_list_and_included_in_list_archived() {
+        let conn = test_connection();
+        let workspace_id = make_workspace(&conn);
+        let project = create(&conn, workspace_id.clone(), "Launch".into(), None).unwrap();
+
+        archive(&conn, project.id.clone()).unwrap();
+
+        assert_eq!(list(&conn, workspace_id.clone()).unwrap().len(), 0);
+        let archived = list_archived(&conn, workspace_id).unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].id, project.id);
+        assert!(archived[0].archived);
     }
 
     #[test]
