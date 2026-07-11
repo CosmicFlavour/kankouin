@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
 
 // Every hook talks to the Rust backend exclusively through this function, so
 // mocking it once here (rather than per test file) is enough to isolate all
@@ -26,5 +27,9 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 afterEach(() => {
+  // Vitest isn't run with `globals: true`, so @testing-library/react can't
+  // detect a global `afterEach` to auto-register its own cleanup — do it
+  // explicitly, or component trees from one test leak into the next.
+  cleanup();
   vi.clearAllMocks();
 });
