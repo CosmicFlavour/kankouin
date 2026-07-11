@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ArchiveIcon, Trash2Icon } from "lucide-react";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Tag, TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
@@ -14,7 +15,11 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DialogClose,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SubtaskSection } from "@/components/SubtaskSection";
 import { TagSection } from "@/components/TagSection";
 import { DatePickerPopover } from "@/components/DatePickerPopover";
@@ -221,8 +226,32 @@ export function TaskDetailPanel({
   return (
     <div className="flex flex-col gap-4">
       <DialogHeader>
-        <DialogTitle>{task.title}</DialogTitle>
+        <div className="flex items-center justify-between gap-2 pr-6">
+          <DialogTitle>{task.title}</DialogTitle>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleArchive}
+            >
+              <ArchiveIcon />
+              <span className="sr-only">Archive</span>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
+              onClick={handleDelete}
+            >
+              <Trash2Icon />
+              <span className="sr-only">Delete</span>
+            </Button>
+          </div>
+        </div>
       </DialogHeader>
+      {dangerError && <p className="text-sm text-destructive">{dangerError}</p>}
 
       <dl className="flex flex-col gap-3 text-sm">
         <div>
@@ -386,16 +415,10 @@ export function TaskDetailPanel({
 
       <SubtaskSection taskId={task.id} />
 
-      <div className="flex items-center gap-2 border-t border-border pt-4">
-        <Button type="button" variant="outline" size="sm" onClick={handleArchive}>
-          Archive
-        </Button>
-        <Button type="button" variant="destructive" size="sm" onClick={handleDelete}>
-          Delete
-        </Button>
-        {dangerError && (
-          <p className="text-sm text-destructive">{dangerError}</p>
-        )}
+      <div className="flex items-center justify-end border-t border-border pt-4">
+        <DialogClose asChild>
+          <Button type="button">Apply</Button>
+        </DialogClose>
       </div>
     </div>
   );

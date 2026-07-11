@@ -36,10 +36,13 @@ function renderPanel(
   });
   const task = makeTask({ id: "t1", title: "Ship the thing", ...taskOverrides });
   const handlers = makeHandlers();
+  const onOpenChange = vi.fn();
   render(
     // DialogHeader/DialogTitle inside TaskDetailPanel need a Radix Dialog
     // context, same as when TaskBoard renders it inside its own <Dialog>.
-    <Dialog open>
+    // onOpenChange is wired up so the "Apply" button's DialogClose can be
+    // observed closing the dialog, same as TaskBoard's real one would.
+    <Dialog open onOpenChange={onOpenChange}>
       <TaskDetailPanel
         task={task}
         workspaceId="ws-1"
@@ -49,7 +52,7 @@ function renderPanel(
       />
     </Dialog>,
   );
-  return { task, handlers };
+  return { task, handlers, onOpenChange };
 }
 
 describe("TaskDetailPanel — title", () => {
@@ -383,5 +386,19 @@ describe("TaskDetailPanel — archive and delete", () => {
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(await screen.findByText("Error: boom")).toBeInTheDocument();
+  });
+});
+
+describe("TaskDetailPanel — Apply button", () => {
+  it("closes the dialog without touching any field handler", async () => {
+    const user = userEvent.setup();
+    const { handlers, onOpenChange } = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(handlers.onChangeTitle).not.toHaveBeenCalled();
+    expect(handlers.onArchive).not.toHaveBeenCalled();
+    expect(handlers.onDelete).not.toHaveBeenCalled();
   });
 });
