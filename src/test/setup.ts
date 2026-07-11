@@ -26,6 +26,20 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+// jsdom doesn't implement the pointer-capture methods; @dnd-kit's pointer
+// sensor calls them on drag start (TaskCard/TaskColumn use useDraggable /
+// useDroppable), and the resulting TypeError otherwise swallows the
+// subsequent click silently instead of failing loudly.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false;
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = () => {};
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = () => {};
+}
+
 afterEach(() => {
   // Vitest isn't run with `globals: true`, so @testing-library/react can't
   // detect a global `afterEach` to auto-register its own cleanup — do it
