@@ -8,12 +8,6 @@ use tauri::{AppHandle, Manager};
 use crate::commands::settings;
 use crate::error::{AppError, AppResult};
 
-/// Name of the db file at its old, fixed location (`app_data_dir`). Existing
-/// installs that predate the relocatable-path feature have their file here
-/// with no `db_file_path` recorded in settings yet — startup resolution
-/// adopts it automatically so upgrading doesn't look like data loss.
-const LEGACY_DB_FILE_NAME: &str = "kankouin.sqlite3";
-
 /// Where the live db currently stands, as reported to the frontend so it can
 /// gate rendering (and explain *why*) when there's no usable connection yet.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -88,39 +82,22 @@ fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-/// Resolves which db file to load at startup, in order:
-/// 1. `db_file_path` recorded in settings.
-/// 2. The legacy fixed location (`app_data_dir/kankouin.sqlite3`), if a file
-///    already exists there from before this feature existed — adopted into
-///    settings so it keeps loading automatically from here on.
-/// 3. Neither: a fresh install with nothing configured yet.
+/// Resolves which db file to load at startup from `db_file_path` in
+/// settings — `NotConfigured` if nothing's been set up yet.
 ///
 /// Never fails outright on a bad/missing file — that's reported as
 /// `DbStatus::Missing`/`Error` so the frontend can offer to create or open
 /// a different one, rather than the app refusing to start.
 pub fn resolve_startup_db(app_handle: &AppHandle) -> AppResult<(Connection, DbStatus)> {
     let config_dir = app_handle.path().app_config_dir()?;
-    let data_dir = app_handle.path().app_data_dir()?;
-    resolve_db_from_dirs(&config_dir, &data_dir)
+    resolve_db_from_config_dir(&config_dir)
 }
 
 /// Path-based core of `resolve_startup_db`, split out so it's testable
 /// without a running Tauri app (which `AppHandle` requires).
-fn resolve_db_from_dirs(config_dir: &Path, data_dir: &Path) -> AppResult<(Connection, DbStatus)> {
+fn resolve_db_from_config_dir(config_dir: &Path) -> AppResult<(Connection, DbStatus)> {
     let settings = settings::read(config_dir);
-
-    let path = match settings.db_file_path {
-        Some(p) => Some(PathBuf::from(p)),
-        None => {
-            let legacy_path = data_dir.join(LEGACY_DB_FILE_NAME);
-            if legacy_path.exists() {
-                settings::save_db_file_path(config_dir, path_string(&legacy_path))?;
-                Some(legacy_path)
-            } else {
-                None
-            }
-        }
-    };
+    let path = settings.db_file_path.map(PathBuf::from);
 
     let Some(path) = path else {
         return Ok((placeholder_connection(), DbStatus::NotConfigured));
@@ -171,46 +148,20 @@ mod tests {
     fn fresh_install_with_nothing_configured_is_not_configured() {
         let root = tempfile::tempdir().unwrap();
         let config_dir = root.path().join("config");
-        let data_dir = root.path().join("data");
 
-        let (_conn, status) = resolve_db_from_dirs(&config_dir, &data_dir).unwrap();
+        let (_conn, status) = resolve_db_from_config_dir(&config_dir).unwrap();
 
         assert_eq!(status, DbStatus::NotConfigured);
-    }
-
-    #[test]
-    fn adopts_legacy_default_location_when_settings_has_no_path_yet() {
-        let root = tempfile::tempdir().unwrap();
-        let config_dir = root.path().join("config");
-        let data_dir = root.path().join("data");
-        let legacy_path = data_dir.join(LEGACY_DB_FILE_NAME);
-        open_and_migrate(&legacy_path).unwrap();
-
-        let (_conn, status) = resolve_db_from_dirs(&config_dir, &data_dir).unwrap();
-
-        assert_eq!(
-            status,
-            DbStatus::Ok {
-                path: path_string(&legacy_path)
-            }
-        );
-        // Adoption is persisted, not re-derived every launch.
-        let settings = settings::read(&config_dir);
-        assert_eq!(
-            settings.db_file_path.as_deref(),
-            Some(path_string(&legacy_path).as_str())
-        );
     }
 
     #[test]
     fn configured_path_that_no_longer_exists_is_reported_missing_not_recreated() {
         let root = tempfile::tempdir().unwrap();
         let config_dir = root.path().join("config");
-        let data_dir = root.path().join("data");
         let configured_path = root.path().join("moved-away.sqlite3");
         settings::save_db_file_path(&config_dir, path_string(&configured_path)).unwrap();
 
-        let (_conn, status) = resolve_db_from_dirs(&config_dir, &data_dir).unwrap();
+        let (_conn, status) = resolve_db_from_config_dir(&config_dir).unwrap();
 
         assert_eq!(
             status,
@@ -226,33 +177,11 @@ mod tests {
     fn configured_path_that_exists_loads_normally() {
         let root = tempfile::tempdir().unwrap();
         let config_dir = root.path().join("config");
-        let data_dir = root.path().join("data");
         let configured_path = root.path().join("my-tasks.sqlite3");
         open_and_migrate(&configured_path).unwrap();
         settings::save_db_file_path(&config_dir, path_string(&configured_path)).unwrap();
 
-        let (_conn, status) = resolve_db_from_dirs(&config_dir, &data_dir).unwrap();
-
-        assert_eq!(
-            status,
-            DbStatus::Ok {
-                path: path_string(&configured_path)
-            }
-        );
-    }
-
-    #[test]
-    fn configured_path_takes_priority_over_legacy_default_location() {
-        let root = tempfile::tempdir().unwrap();
-        let config_dir = root.path().join("config");
-        let data_dir = root.path().join("data");
-        let legacy_path = data_dir.join(LEGACY_DB_FILE_NAME);
-        open_and_migrate(&legacy_path).unwrap();
-        let configured_path = root.path().join("elsewhere.sqlite3");
-        open_and_migrate(&configured_path).unwrap();
-        settings::save_db_file_path(&config_dir, path_string(&configured_path)).unwrap();
-
-        let (_conn, status) = resolve_db_from_dirs(&config_dir, &data_dir).unwrap();
+        let (_conn, status) = resolve_db_from_config_dir(&config_dir).unwrap();
 
         assert_eq!(
             status,
