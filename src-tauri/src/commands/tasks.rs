@@ -270,10 +270,31 @@ pub(crate) fn create(
     let now = Utc::now().to_rfc3339();
     let priority = priority.unwrap_or_else(|| "medium".to_string());
     validate_one_of("priority", &priority, &VALID_PRIORITIES)?;
+
+    // New tasks default to the "someday" fuzzy bucket rather than no
+    // deadline at all: the create flow has no deadline picker, so a user
+    // who doesn't care yet just leaves it — "someday" is what that
+    // actually means, rather than an unset deadline nobody ever revisits.
+    let deadline_type = "fuzzy";
+    let fuzzy_bucket = "someday";
+    let bucket_period = crate::dates::current_bucket_period(fuzzy_bucket, Utc::now());
+
     conn.execute(
-        "INSERT INTO tasks (id, project_id, epic_id, user_story_id, title, description, state, priority, state_since, archived, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', ?7, ?8, 0, ?8, ?8)",
-        params![id, project_id, epic_id, user_story_id, title, description, priority, now],
+        "INSERT INTO tasks (id, project_id, epic_id, user_story_id, title, description, state, priority, deadline_type, fuzzy_bucket, bucket_period, state_since, archived, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', ?7, ?8, ?9, ?10, ?11, 0, ?11, ?11)",
+        params![
+            id,
+            project_id,
+            epic_id,
+            user_story_id,
+            title,
+            description,
+            priority,
+            deadline_type,
+            fuzzy_bucket,
+            bucket_period,
+            now
+        ],
     )?;
     Ok(Task {
         id,
@@ -284,10 +305,10 @@ pub(crate) fn create(
         description,
         state: "todo".into(),
         priority,
-        deadline_type: None,
+        deadline_type: Some(deadline_type.to_string()),
         exact_date: None,
-        fuzzy_bucket: None,
-        bucket_period: None,
+        fuzzy_bucket: Some(fuzzy_bucket.to_string()),
+        bucket_period,
         state_since: now.clone(),
         archived: false,
         created_at: now.clone(),
@@ -778,6 +799,9 @@ mod tests {
         .unwrap();
         assert_eq!(task.state, "todo");
         assert_eq!(task.priority, "medium");
+        assert_eq!(task.deadline_type.as_deref(), Some("fuzzy"));
+        assert_eq!(task.fuzzy_bucket.as_deref(), Some("someday"));
+        assert_eq!(task.exact_date, None);
 
         let listed = list(&conn, project_id.clone()).unwrap();
         assert_eq!(listed.len(), 1);
