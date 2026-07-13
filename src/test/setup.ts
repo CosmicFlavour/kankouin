@@ -51,6 +51,12 @@ if (!Element.prototype.releasePointerCapture) {
   Element.prototype.releasePointerCapture = () => {};
 }
 
+// jsdom doesn't implement scrollIntoView; Radix's Select calls it on the
+// selected item when the popup opens.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 afterEach(() => {
   // Vitest isn't run with `globals: true`, so @testing-library/react can't
   // detect a global `afterEach` to auto-register its own cleanup — do it

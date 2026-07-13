@@ -4,6 +4,18 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+// Radix's Select.Item forbids an empty-string value, so "no epic/story
+// selected" needs its own sentinel to round-trip through onValueChange.
+const ALL_EPICS = "__all_epics__";
+const ALL_STORIES = "__all_stories__";
 
 export type TaskScope =
   | { type: "epic"; id: string }
@@ -107,18 +119,24 @@ export function ScopeFilter({
 
   return (
     <div className="flex items-center gap-2 text-sm">
-      <select
-        value={selectedEpicId}
-        onChange={(e) => handleEpicChange(e.target.value)}
-        className="rounded-md border border-border bg-background px-2 py-1"
+      <Select
+        value={selectedEpicId || ALL_EPICS}
+        onValueChange={(value) =>
+          handleEpicChange(value === ALL_EPICS ? "" : value)
+        }
       >
-        <option value="">All epics</option>
-        {epics.map((epic) => (
-          <option key={epic.id} value={epic.id}>
-            {epic.title}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_EPICS}>All epics</SelectItem>
+          {epics.map((epic) => (
+            <SelectItem key={epic.id} value={epic.id}>
+              {epic.title}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {selectedEpicId && scope?.type === "epic" && (
         <Button
           type="button"
@@ -132,18 +150,24 @@ export function ScopeFilter({
         </Button>
       )}
 
-      <select
-        value={selectedStoryId}
-        onChange={(e) => handleStoryChange(e.target.value)}
-        className="rounded-md border border-border bg-background px-2 py-1"
+      <Select
+        value={selectedStoryId || ALL_STORIES}
+        onValueChange={(value) =>
+          handleStoryChange(value === ALL_STORIES ? "" : value)
+        }
       >
-        <option value="">All user stories</option>
-        {storyOptions.map((story) => (
-          <option key={story.id} value={story.id}>
-            {storyLabel(story)}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_STORIES}>All user stories</SelectItem>
+          {storyOptions.map((story) => (
+            <SelectItem key={story.id} value={story.id}>
+              {storyLabel(story)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {selectedStoryId && (
         <Button
           type="button"

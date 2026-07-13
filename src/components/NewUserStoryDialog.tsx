@@ -9,6 +9,17 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+// Radix's Select.Item forbids an empty-string value, so "no epic" needs its
+// own sentinel to round-trip through onValueChange.
+const NO_EPIC = "__no_epic__";
 
 interface NewUserStoryDialogProps {
   trigger: React.ReactNode;
@@ -62,18 +73,22 @@ export function NewUserStoryDialog({
             onChange={(e) => setTitle(e.target.value)}
             placeholder="User story title"
           />
-          <select
-            value={epicId}
-            onChange={(e) => setEpicId(e.target.value)}
-            className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+          <Select
+            value={epicId || NO_EPIC}
+            onValueChange={(value) => setEpicId(value === NO_EPIC ? "" : value)}
           >
-            <option value="">No epic</option>
-            {epics.map((epic) => (
-              <option key={epic.id} value={epic.id}>
-                {epic.title}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_EPIC}>No epic</SelectItem>
+              {epics.map((epic) => (
+                <SelectItem key={epic.id} value={epic.id}>
+                  {epic.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button type="submit">Create user story</Button>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </form>

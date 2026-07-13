@@ -20,11 +20,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SubtaskSection } from "@/components/SubtaskSection";
 import { TagSection } from "@/components/TagSection";
 import { DatePickerPopover } from "@/components/DatePickerPopover";
 
 const PRIORITIES = ["low", "medium", "high"];
+
+// Radix's Select.Item forbids an empty-string value, so "no epic/story
+// parent" needs its own sentinel to round-trip through onValueChange.
+const NO_PARENT = "__no_parent__";
 
 interface TaskDetailPanelProps {
   task: TaskSummary;
@@ -94,15 +105,14 @@ export function TaskDetailPanel({
     ? `story:${task.user_story_id}`
     : task.epic_id
       ? `epic:${task.epic_id}`
-      : "";
+      : NO_PARENT;
 
   function storyLabel(story: UserStory) {
     const epicTitle = epics.find((e) => e.id === story.epic_id)?.title;
     return epicTitle ? `${epicTitle} / ${story.title}` : story.title;
   }
 
-  async function handleParentChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const value = e.target.value;
+  async function handleParentChange(value: string) {
     try {
       if (value.startsWith("epic:")) {
         await onChangeParent(value.slice("epic:".length), null);
@@ -379,23 +389,24 @@ export function TaskDetailPanel({
         <div>
           <dt className="text-muted-foreground">Parent</dt>
           <dd>
-            <select
-              value={parentValue}
-              onChange={handleParentChange}
-              className="mt-1 rounded-md border border-border bg-background px-2 py-1 text-sm"
-            >
-              <option value="">Project only</option>
-              {epics.map((epic) => (
-                <option key={epic.id} value={`epic:${epic.id}`}>
-                  {epic.title}
-                </option>
-              ))}
-              {userStories.map((story) => (
-                <option key={story.id} value={`story:${story.id}`}>
-                  {storyLabel(story)}
-                </option>
-              ))}
-            </select>
+            <Select value={parentValue} onValueChange={handleParentChange}>
+              <SelectTrigger className="mt-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_PARENT}>Project only</SelectItem>
+                {epics.map((epic) => (
+                  <SelectItem key={epic.id} value={`epic:${epic.id}`}>
+                    {epic.title}
+                  </SelectItem>
+                ))}
+                {userStories.map((story) => (
+                  <SelectItem key={story.id} value={`story:${story.id}`}>
+                    {storyLabel(story)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {parentError && (
               <p className="mt-1 text-sm text-destructive">{parentError}</p>
             )}

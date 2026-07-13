@@ -3,6 +3,13 @@ import type { TaskSummary } from "@/hooks/useTasks";
 import { FUZZY_BUCKETS } from "@/lib/deadline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface StaleTaskCardProps {
   task: TaskSummary;
@@ -80,18 +87,22 @@ export function StaleTaskCard({
         onSubmit={handleUpdateDeadline}
         className="flex flex-wrap items-center gap-2 border-t border-border pt-3"
       >
-        <select
+        <Select
           value={deadlineType}
-          onChange={(e) => {
-            const next = e.target.value as "exact" | "fuzzy";
+          onValueChange={(value) => {
+            const next = value as "exact" | "fuzzy";
             setDeadlineType(next);
             setDeadlineValue(next === "fuzzy" ? FUZZY_BUCKETS[0].value : "");
           }}
-          className="rounded-md border border-border bg-background px-2 py-1 text-sm"
         >
-          <option value="exact">Exact date</option>
-          <option value="fuzzy">Fuzzy</option>
-        </select>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="exact">Exact date</SelectItem>
+            <SelectItem value="fuzzy">Fuzzy</SelectItem>
+          </SelectContent>
+        </Select>
         {deadlineType === "exact" ? (
           <Input
             type="date"
@@ -100,17 +111,18 @@ export function StaleTaskCard({
             className="w-auto"
           />
         ) : (
-          <select
-            value={deadlineValue}
-            onChange={(e) => setDeadlineValue(e.target.value)}
-            className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-          >
-            {FUZZY_BUCKETS.map((bucket) => (
-              <option key={bucket.value} value={bucket.value}>
-                {bucket.label}
-              </option>
-            ))}
-          </select>
+          <Select value={deadlineValue} onValueChange={setDeadlineValue}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FUZZY_BUCKETS.map((bucket) => (
+                <SelectItem key={bucket.value} value={bucket.value}>
+                  {bucket.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
         <Button type="submit" size="sm" variant="outline">
           Update deadline

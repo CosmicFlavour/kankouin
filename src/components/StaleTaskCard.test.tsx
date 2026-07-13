@@ -120,7 +120,11 @@ describe("StaleTaskCard", () => {
     const task = makeTask({ state: "doing" });
     render(<StaleTaskCard task={task} location={null} {...handlers} />);
 
-    await user.selectOptions(screen.getByDisplayValue("Exact date"), "fuzzy");
+    // The deadline-type field is a Radix Select, not a native <select>: at
+    // this point it's the only combobox on the page (the fuzzy-bucket one
+    // only appears once "Fuzzy" is picked here).
+    await user.click(screen.getByRole("combobox"));
+    await user.click(await screen.findByRole("option", { name: "Fuzzy" }));
     await user.click(screen.getByRole("button", { name: "Update deadline" }));
 
     expect(handlers.onUpdateDeadline).toHaveBeenCalledWith("fuzzy", "this_week");

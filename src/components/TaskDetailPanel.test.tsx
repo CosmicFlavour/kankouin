@@ -273,11 +273,21 @@ describe("TaskDetailPanel — parent", () => {
   const epic = makeEpic({ id: "epic-1", title: "Launch" });
   const story = makeUserStory({ id: "story-1", title: "Onboarding", epic_id: null });
 
+  // The parent field is a Radix Select, not a native <select>: opening it
+  // and picking an option is click-based, there's no selectOptions() shortcut.
+  async function pickParentOption(
+    user: ReturnType<typeof userEvent.setup>,
+    name: string,
+  ) {
+    await user.click(screen.getByRole("combobox"));
+    await user.click(await screen.findByRole("option", { name }));
+  }
+
   it("selecting an epic calls onChangeParent with the epic id", async () => {
     const user = userEvent.setup();
     const { handlers } = renderPanel({}, { epics: [epic] });
 
-    await user.selectOptions(screen.getByRole("combobox"), "epic:epic-1");
+    await pickParentOption(user, "Launch");
 
     expect(handlers.onChangeParent).toHaveBeenCalledWith("epic-1", null);
   });
@@ -286,7 +296,7 @@ describe("TaskDetailPanel — parent", () => {
     const user = userEvent.setup();
     const { handlers } = renderPanel({}, { userStories: [story] });
 
-    await user.selectOptions(screen.getByRole("combobox"), "story:story-1");
+    await pickParentOption(user, "Onboarding");
 
     expect(handlers.onChangeParent).toHaveBeenCalledWith(null, "story-1");
   });
@@ -295,7 +305,7 @@ describe("TaskDetailPanel — parent", () => {
     const user = userEvent.setup();
     const { handlers } = renderPanel({ epic_id: "epic-1" }, { epics: [epic] });
 
-    await user.selectOptions(screen.getByRole("combobox"), "");
+    await pickParentOption(user, "Project only");
 
     expect(handlers.onChangeParent).toHaveBeenCalledWith(null, null);
   });
@@ -305,7 +315,7 @@ describe("TaskDetailPanel — parent", () => {
     const { handlers } = renderPanel({}, { epics: [epic] });
     handlers.onChangeParent.mockRejectedValue(new Error("boom"));
 
-    await user.selectOptions(screen.getByRole("combobox"), "epic:epic-1");
+    await pickParentOption(user, "Launch");
 
     expect(await screen.findByText("Error: boom")).toBeInTheDocument();
   });
