@@ -12,7 +12,7 @@ const VALID_THEMES: [&str; 2] = ["light", "dark"];
 /// Reads `settings.json` from `config_dir`. A missing file (first run) or a
 /// corrupted one both fall back to defaults rather than erroring — this is
 /// convenience data, not user content, so it should never block the app.
-fn read(config_dir: &Path) -> Settings {
+pub fn read(config_dir: &Path) -> Settings {
     fs::read_to_string(config_dir.join(FILE_NAME))
         .ok()
         .and_then(|contents| serde_json::from_str(&contents).ok())
@@ -32,9 +32,16 @@ fn write(config_dir: &Path, settings: &Settings) -> AppResult<()> {
     Ok(())
 }
 
-// Both save_* helpers read the existing file first and only overwrite their
-// own field, so setting the theme doesn't clobber the sync file path (and
-// vice versa) — Settings has more than one field now.
+// All save_* helpers read the existing file first and only overwrite their
+// own field, so setting one field doesn't clobber the others — Settings has
+// more than one field now.
+
+pub fn save_db_file_path(config_dir: &Path, path: String) -> AppResult<Settings> {
+    let mut settings = read(config_dir);
+    settings.db_file_path = Some(path);
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
 
 fn save_last_sync_file_path(config_dir: &Path, path: String) -> AppResult<Settings> {
     let mut settings = read(config_dir);
@@ -119,6 +126,28 @@ mod tests {
         assert_eq!(
             settings.last_sync_file_path.as_deref(),
             Some("/second/path.enc")
+        );
+    }
+
+    #[test]
+    fn db_file_path_round_trips_and_does_not_clobber_sync_path() {
+        let dir = tempfile::tempdir().unwrap();
+        save_last_sync_file_path(dir.path(), "/some/sync.enc".into()).unwrap();
+        let written = save_db_file_path(dir.path(), "/home/user/kankouin.sqlite3".into()).unwrap();
+
+        assert_eq!(
+            written.db_file_path.as_deref(),
+            Some("/home/user/kankouin.sqlite3")
+        );
+        assert_eq!(
+            written.last_sync_file_path.as_deref(),
+            Some("/some/sync.enc")
+        );
+
+        let read_back = read(dir.path());
+        assert_eq!(
+            read_back.db_file_path.as_deref(),
+            Some("/home/user/kankouin.sqlite3")
         );
     }
 

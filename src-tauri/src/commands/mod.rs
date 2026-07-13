@@ -1,5 +1,6 @@
 pub mod crypto;
 pub mod daily_review;
+pub mod database;
 pub mod epics;
 pub mod projects;
 pub mod settings;
