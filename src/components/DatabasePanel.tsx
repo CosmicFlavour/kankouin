@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { open, save, confirm } from "@tauri-apps/plugin-dialog";
+import { FilePlus2Icon, FolderOpenIcon } from "lucide-react";
 import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
 import { Button } from "@/components/ui/button";
 
@@ -54,20 +55,38 @@ export function DatabasePanel() {
   if (!status || status.status !== "ok") return null;
 
   return (
-    <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
-      <h2 className="text-sm font-medium text-muted-foreground">Database</h2>
-      <p className="truncate text-xs text-muted-foreground" title={status.path}>
-        {status.path}
-      </p>
-      <div className="flex gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={handleCreate} disabled={busy}>
-          New
+    <div className="mt-3 border-b border-border pb-3">
+      <div className="flex items-center gap-1">
+        <p
+          className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+          title={status.path}
+        >
+          {status.path}
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          title="Create a new database"
+          onClick={handleCreate}
+          disabled={busy}
+        >
+          <FilePlus2Icon />
+          <span className="sr-only">Create a new database</span>
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={handleOpen} disabled={busy}>
-          Open different
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          title="Open a different database"
+          onClick={handleOpen}
+          disabled={busy}
+        >
+          <FolderOpenIcon />
+          <span className="sr-only">Open a different database</span>
         </Button>
       </div>
-      {actionError && <p className="text-sm text-destructive">{actionError}</p>}
+      {actionError && <p className="mt-1 text-xs text-destructive">{actionError}</p>}
     </div>
   );
 }

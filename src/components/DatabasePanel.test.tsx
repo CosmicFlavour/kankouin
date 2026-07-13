@@ -47,7 +47,7 @@ describe("DatabasePanel", () => {
     mockConfirm.mockResolvedValue(false);
     const user = await renderPanel();
 
-    await user.click(screen.getByRole("button", { name: "New" }));
+    await user.click(screen.getByRole("button", { name: "Create a new database" }));
 
     await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
     expect(mockInvoke).not.toHaveBeenCalledWith(
@@ -66,7 +66,7 @@ describe("DatabasePanel", () => {
     const reload = mockLocationReload();
     const user = await renderPanel();
 
-    await user.click(screen.getByRole("button", { name: "New" }));
+    await user.click(screen.getByRole("button", { name: "Create a new database" }));
 
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith("create_database_file", {
@@ -86,7 +86,7 @@ describe("DatabasePanel", () => {
     const reload = mockLocationReload();
     const user = await renderPanel();
 
-    await user.click(screen.getByRole("button", { name: "Open different" }));
+    await user.click(screen.getByRole("button", { name: "Open a different database" }));
 
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith("open_database_file", {
@@ -108,7 +108,7 @@ describe("DatabasePanel", () => {
     const reload = mockLocationReload();
     const user = await renderPanel();
 
-    await user.click(screen.getByRole("button", { name: "Open different" }));
+    await user.click(screen.getByRole("button", { name: "Open a different database" }));
 
     expect(await screen.findByText("Error: not a database file")).toBeInTheDocument();
     expect(reload).not.toHaveBeenCalled();

@@ -6,7 +6,7 @@ import { mockOpen, mockSave } from "@/test/tauriMock";
 
 // jsdom's window.location.reload isn't configurable enough for vi.spyOn;
 // replacing the whole location object is the documented workaround (see
-// SyncPanel.test.tsx, which hits the same issue).
+// DatabasePanel.test.tsx, which hits the same issue).
 function mockLocationReload() {
   const reload = vi.fn();
   Object.defineProperty(window, "location", {

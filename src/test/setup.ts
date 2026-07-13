@@ -9,8 +9,8 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
-// Several components (SyncPanel, and now every delete/archive confirmation)
-// gate a destructive action behind the native confirm dialog. Mocking it
+// Several components (DatabasePanel, CloudSyncPanel, and every delete/archive
+// confirmation) gate a destructive action behind the native confirm dialog. Mocking it
 // here means a test that doesn't care about it gets the safe default
 // (confirm() resolves to undefined, i.e. "cancelled") instead of hitting a
 // real Tauri plugin that doesn't exist in jsdom.

@@ -5,7 +5,6 @@ import { WorkspaceTreeItem } from "@/components/WorkspaceTreeItem";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { SyncPanel } from "@/components/SyncPanel";
 import { DatabasePanel } from "@/components/DatabasePanel";
 import { CloudSyncPanel } from "@/components/CloudSyncPanel";
 
@@ -48,6 +47,8 @@ export function WorkspaceSidebar({
         <h1 className="text-lg font-semibold">Kankouin</h1>
         <ThemeToggle />
       </div>
+
+      <DatabasePanel />
 
       <nav className="mt-6 flex flex-col gap-1">
         <button
@@ -124,8 +125,6 @@ export function WorkspaceSidebar({
         ))}
       </nav>
 
-      <DatabasePanel />
-      <SyncPanel />
       <CloudSyncPanel />
     </aside>
   );
