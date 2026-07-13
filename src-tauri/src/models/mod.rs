@@ -9,7 +9,7 @@ pub mod workspace;
 
 pub use epic::Epic;
 pub use project::Project;
-pub use settings::Settings;
+pub use settings::{CloudSync, Settings};
 pub use sync_meta::SyncMeta;
 pub use tag::Tag;
 pub use task::{Subtask, Task, TaskDetail, TaskLogEntry, TaskSummary};

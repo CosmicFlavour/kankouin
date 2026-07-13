@@ -1,3 +1,4 @@
+pub mod cloud;
 pub mod commands;
 mod dates;
 pub mod db;
@@ -76,6 +77,13 @@ pub fn run() {
             commands::database::create_database_file,
             commands::database::open_database_file,
             commands::database::get_database_status,
+            commands::cloud_sync::list_cloud_providers,
+            commands::cloud_sync::get_cloud_status,
+            commands::cloud_sync::start_cloud_connect,
+            commands::cloud_sync::disconnect_cloud,
+            commands::cloud_sync::set_cloud_passphrase,
+            commands::cloud_sync::push_to_cloud,
+            commands::cloud_sync::pull_from_cloud,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -4,7 +4,7 @@ use std::path::Path;
 use tauri::{AppHandle, Manager};
 
 use crate::error::{AppError, AppResult};
-use crate::models::Settings;
+use crate::models::{CloudSync, Settings};
 
 const FILE_NAME: &str = "settings.json";
 const VALID_THEMES: [&str; 2] = ["light", "dark"];
@@ -46,6 +46,20 @@ pub fn save_db_file_path(config_dir: &Path, path: String) -> AppResult<Settings>
 fn save_last_sync_file_path(config_dir: &Path, path: String) -> AppResult<Settings> {
     let mut settings = read(config_dir);
     settings.last_sync_file_path = Some(path);
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
+pub fn save_cloud_sync(config_dir: &Path, cloud_sync: CloudSync) -> AppResult<Settings> {
+    let mut settings = read(config_dir);
+    settings.cloud_sync = Some(cloud_sync);
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
+pub fn clear_cloud_sync(config_dir: &Path) -> AppResult<Settings> {
+    let mut settings = read(config_dir);
+    settings.cloud_sync = None;
     write(config_dir, &settings)?;
     Ok(settings)
 }
@@ -149,6 +163,28 @@ mod tests {
             read_back.db_file_path.as_deref(),
             Some("/home/user/kankouin.sqlite3")
         );
+    }
+
+    #[test]
+    fn cloud_sync_round_trips_and_can_be_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let cloud_sync = CloudSync {
+            provider: "dropbox".into(),
+            account_label: Some("me@example.com".into()),
+            refresh_token: "refresh-token-value".into(),
+            remote_file_ref: Some("/kankouin/backup.enc".into()),
+            passphrase: Some("hunter2".into()),
+        };
+
+        let written = save_cloud_sync(dir.path(), cloud_sync.clone()).unwrap();
+        assert_eq!(written.cloud_sync, Some(cloud_sync.clone()));
+
+        let read_back = read(dir.path());
+        assert_eq!(read_back.cloud_sync, Some(cloud_sync));
+
+        let cleared = clear_cloud_sync(dir.path()).unwrap();
+        assert_eq!(cleared.cloud_sync, None);
+        assert_eq!(read(dir.path()).cloud_sync, None);
     }
 
     #[test]

@@ -1,3 +1,4 @@
+pub mod cloud_sync;
 pub mod crypto;
 pub mod daily_review;
 pub mod database;
