@@ -1,9 +1,9 @@
 export function priorityCardClassName(priority: string): string {
   switch (priority) {
     case "high":
-      return "bg-red-50 border-red-200 dark:bg-red-950/40 dark:border-red-900";
+      return "bg-red-50 border-red-200 dark:bg-red-900/40 dark:border-red-700";
     case "medium":
-      return "bg-amber-50 border-amber-200 dark:bg-amber-950/40 dark:border-amber-900";
+      return "bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:border-amber-600";
     default:
       return "bg-muted border-border";
   }
