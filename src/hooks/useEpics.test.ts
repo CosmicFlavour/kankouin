@@ -77,6 +77,50 @@ describe("useEpics", () => {
     expect(mockInvoke).toHaveBeenCalledWith("delete_epic", { id: "epic-1" });
   });
 
+  it("updateEpic replaces the epic with the renamed version", async () => {
+    const epic = makeEpic({ id: "epic-1", title: "Launch" });
+    const renamed = makeEpic({ id: "epic-1", title: "Launch v2" });
+    mockCommands({
+      list_epics: () => [epic],
+      update_epic: () => renamed,
+    });
+
+    const { result } = renderHook(() => useEpics("project-1"));
+    await waitFor(() => expect(result.current.epics).toEqual([epic]));
+
+    await act(async () => {
+      await result.current.updateEpic("epic-1", "Launch v2");
+    });
+
+    expect(result.current.epics).toEqual([renamed]);
+    expect(mockInvoke).toHaveBeenCalledWith("update_epic", {
+      id: "epic-1",
+      title: "Launch v2",
+      description: null,
+    });
+  });
+
+  it("does not rename the epic locally when the update fails", async () => {
+    const epic = makeEpic({ id: "epic-1", title: "Launch" });
+    mockCommands({
+      list_epics: () => [epic],
+      update_epic: () => {
+        throw new Error("boom");
+      },
+    });
+
+    const { result } = renderHook(() => useEpics("project-1"));
+    await waitFor(() => expect(result.current.epics).toEqual([epic]));
+
+    await expect(
+      act(async () => {
+        await result.current.updateEpic("epic-1", "Launch v2");
+      }),
+    ).rejects.toThrow("boom");
+
+    expect(result.current.epics).toEqual([epic]);
+  });
+
   it("does not remove the epic locally when deletion fails", async () => {
     const epic = makeEpic({ id: "epic-1" });
     mockCommands({

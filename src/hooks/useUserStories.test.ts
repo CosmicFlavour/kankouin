@@ -80,6 +80,51 @@ describe("useUserStories", () => {
     });
   });
 
+  it("updateUserStory replaces the story with the renamed version", async () => {
+    const story = makeUserStory({ id: "story-1", title: "Onboarding" });
+    const renamed = makeUserStory({ id: "story-1", title: "Onboarding v2" });
+    mockCommands({
+      list_user_stories: () => [story],
+      update_user_story: () => renamed,
+    });
+
+    const { result } = renderHook(() => useUserStories("project-1"));
+    await waitFor(() => expect(result.current.userStories).toEqual([story]));
+
+    await act(async () => {
+      await result.current.updateUserStory("story-1", "Onboarding v2");
+    });
+
+    expect(result.current.userStories).toEqual([renamed]);
+    expect(mockInvoke).toHaveBeenCalledWith("update_user_story", {
+      id: "story-1",
+      title: "Onboarding v2",
+      description: null,
+      epicId: null,
+    });
+  });
+
+  it("does not rename the story locally when the update fails", async () => {
+    const story = makeUserStory({ id: "story-1", title: "Onboarding" });
+    mockCommands({
+      list_user_stories: () => [story],
+      update_user_story: () => {
+        throw new Error("boom");
+      },
+    });
+
+    const { result } = renderHook(() => useUserStories("project-1"));
+    await waitFor(() => expect(result.current.userStories).toEqual([story]));
+
+    await expect(
+      act(async () => {
+        await result.current.updateUserStory("story-1", "Onboarding v2");
+      }),
+    ).rejects.toThrow("boom");
+
+    expect(result.current.userStories).toEqual([story]);
+  });
+
   it("does not remove the story locally when deletion fails", async () => {
     const story = makeUserStory({ id: "story-1" });
     mockCommands({

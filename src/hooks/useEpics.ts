@@ -52,6 +52,18 @@ export function useEpics(projectId: string | null) {
     return created;
   }
 
+  // Rename only; description isn't editable from any UI yet, so it's left
+  // untouched (the backend COALESCEs a null field to the existing value).
+  async function updateEpic(epicId: string, title: string) {
+    const updated = await invoke<Epic>("update_epic", {
+      id: epicId,
+      title,
+      description: null,
+    });
+    setEpics((prev) => prev.map((e) => (e.id === epicId ? updated : e)));
+    return updated;
+  }
+
   // Hard delete, but non-destructive to tasks: the backend only cascades
   // away the epic and its user stories — any task attached to either gets
   // unlinked back to the bare project (epic_id/user_story_id -> NULL) rather
@@ -61,5 +73,5 @@ export function useEpics(projectId: string | null) {
     setEpics((prev) => prev.filter((e) => e.id !== epicId));
   }
 
-  return { epics, loading, error, createEpic, deleteEpic };
+  return { epics, loading, error, createEpic, updateEpic, deleteEpic };
 }
