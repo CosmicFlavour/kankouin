@@ -195,6 +195,17 @@ fn list(conn: &Connection, project_id: String) -> AppResult<Vec<TaskSummary>> {
     attach_tags_and_blocked(conn, tasks)
 }
 
+fn list_archived(conn: &Connection, project_id: String) -> AppResult<Vec<TaskSummary>> {
+    let sql = format!(
+        "SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = ?1 AND archived = 1 ORDER BY updated_at DESC"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let tasks = stmt
+        .query_map(params![project_id], row_to_task)?
+        .collect::<Result<Vec<_>, _>>()?;
+    attach_tags_and_blocked(conn, tasks)
+}
+
 /// Tasks in `doing` or `under_review` whose current state started at or
 /// before `cutoff_rfc3339` — the query behind Daily Review's stale-task
 /// list ([daily_review.rs](crate::commands::daily_review)).
@@ -470,6 +481,21 @@ fn archive(conn: &Connection, id: String) -> AppResult<()> {
     Ok(())
 }
 
+// Returns the full row (unlike `archive`) so the frontend can drop the task
+// straight into its active task list without a stale gap until the next
+// full refetch.
+fn unarchive(conn: &Connection, id: String) -> AppResult<Task> {
+    let now = Utc::now().to_rfc3339();
+    let changed = conn.execute(
+        "UPDATE tasks SET archived = 0, updated_at = ?2 WHERE id = ?1",
+        params![id, now],
+    )?;
+    if changed == 0 {
+        return Err(AppError::NotFound);
+    }
+    get_task_row(conn, &id)
+}
+
 // Unlike archive, this is a permanent, unrecoverable removal — subtasks,
 // logs, tags and dependencies all cascade away with it (see
 // migrations/0001_init.sql).
@@ -543,6 +569,15 @@ fn flip_subtask(conn: &Connection, id: String) -> AppResult<Subtask> {
 pub fn list_tasks(state: State<AppState>, project_id: String) -> AppResult<Vec<TaskSummary>> {
     let conn = state.conn()?;
     list(&conn, project_id)
+}
+
+#[tauri::command]
+pub fn list_archived_tasks(
+    state: State<AppState>,
+    project_id: String,
+) -> AppResult<Vec<TaskSummary>> {
+    let conn = state.conn()?;
+    list_archived(&conn, project_id)
 }
 
 #[tauri::command]
@@ -631,6 +666,12 @@ pub fn archive_task(state: State<AppState>, id: String) -> AppResult<()> {
 }
 
 #[tauri::command]
+pub fn unarchive_task(state: State<AppState>, id: String) -> AppResult<Task> {
+    let conn = state.conn()?;
+    unarchive(&conn, id)
+}
+
+#[tauri::command]
 pub fn delete_task(state: State<AppState>, id: String) -> AppResult<()> {
     let conn = state.conn()?;
     delete(&conn, id)
@@ -711,6 +752,61 @@ mod tests {
 
         archive(&conn, task.id.clone()).unwrap();
         assert_eq!(list(&conn, project_id).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn archived_tasks_are_excluded_from_list_and_included_in_list_archived() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = create(
+            &conn,
+            project_id.clone(),
+            "T".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        archive(&conn, task.id.clone()).unwrap();
+
+        assert_eq!(list(&conn, project_id.clone()).unwrap().len(), 0);
+        let archived = list_archived(&conn, project_id).unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].task.id, task.id);
+        assert!(archived[0].task.archived);
+    }
+
+    #[test]
+    fn unarchive_restores_task_to_the_active_list() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = create(
+            &conn,
+            project_id.clone(),
+            "T".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        archive(&conn, task.id.clone()).unwrap();
+        assert_eq!(list(&conn, project_id.clone()).unwrap().len(), 0);
+
+        let restored = unarchive(&conn, task.id.clone()).unwrap();
+        assert!(!restored.archived);
+        assert_eq!(list(&conn, project_id.clone()).unwrap().len(), 1);
+        assert_eq!(list_archived(&conn, project_id).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn unarchive_missing_task_errors() {
+        let conn = test_connection();
+        let result = unarchive(&conn, "does-not-exist".into());
+        assert!(matches!(result, Err(AppError::NotFound)));
     }
 
     #[test]
