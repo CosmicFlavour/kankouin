@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SyncPanel } from "@/components/SyncPanel";
 import { DatabasePanel } from "@/components/DatabasePanel";
+import { CloudSyncPanel } from "@/components/CloudSyncPanel";
 
 interface WorkspaceSidebarProps {
   workspaces: Workspace[];
@@ -125,6 +126,7 @@ export function WorkspaceSidebar({
 
       <DatabasePanel />
       <SyncPanel />
+      <CloudSyncPanel />
     </aside>
   );
 }
