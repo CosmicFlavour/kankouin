@@ -8,12 +8,14 @@ import {
 } from "@dnd-kit/core";
 import { PlusIcon } from "lucide-react";
 import { useTasks, type TaskSummary } from "@/hooks/useTasks";
+import { useArchivedTasks } from "@/hooks/useArchivedTasks";
 import { useTags } from "@/hooks/useTags";
 import { TASK_STATES } from "@/lib/taskState";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TaskColumn } from "@/components/TaskColumn";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
@@ -116,6 +118,7 @@ export function TaskBoard({
     tasks: allTasks,
     loading,
     error,
+    refresh: refreshTasks,
     createTask,
     moveTask,
     updateTask,
@@ -130,12 +133,25 @@ export function TaskBoard({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [showHidden, setShowHidden] = useState(false);
+  const {
+    archivedTasks,
+    loading: archivedLoading,
+    error: archivedError,
+    refresh: refreshArchivedTasks,
+    unarchiveTask,
+  } = useArchivedTasks(showHidden ? projectId : null);
 
   useEffect(() => {
     setSelectedTagIds([]);
   }, [projectId]);
 
-  const tasks = allTasks
+  useEffect(() => {
+    setShowHidden(false);
+  }, [projectId]);
+
+  const combinedTasks = showHidden ? [...allTasks, ...archivedTasks] : allTasks;
+  const tasks = combinedTasks
     .filter((t) => taskMatchesScope(t, scope, userStories))
     .filter(
       (t) =>
@@ -144,7 +160,7 @@ export function TaskBoard({
     );
   // Detail panel stays open for a task even if it falls outside the current
   // scope filter (e.g. it was opened before the scope changed).
-  const selectedTask = allTasks.find((t) => t.id === selectedTaskId);
+  const selectedTask = combinedTasks.find((t) => t.id === selectedTaskId);
   // Create and edit share one Dialog instance (content swaps in place)
   // rather than closing one Dialog and opening another, which can race with
   // Radix's dismiss-on-outside-interaction handling.
@@ -163,6 +179,24 @@ export function TaskBoard({
   async function handleDeleteUserStory(storyId: string) {
     await onDeleteUserStory(storyId);
     if (scope?.type === "story" && scope.id === storyId) onScopeChange(null);
+  }
+
+  // archiveTask/deleteTask only touch the active-task hook's own state, so
+  // the hidden list (a different hook instance) needs an explicit refresh
+  // to notice — but only if it's actually being shown.
+  async function handleArchiveTask(taskId: string) {
+    await archiveTask(taskId);
+    if (showHidden) refreshArchivedTasks();
+  }
+
+  async function handleUnarchiveTask(taskId: string) {
+    await unarchiveTask(taskId);
+    await refreshTasks();
+  }
+
+  async function handleDeleteTask(taskId: string, wasArchived: boolean) {
+    await deleteTask(taskId);
+    if (wasArchived && showHidden) refreshArchivedTasks();
   }
 
   const sensors = useSensors(
@@ -249,6 +283,28 @@ export function TaskBoard({
           selectedTagIds={selectedTagIds}
           onChange={setSelectedTagIds}
         />
+
+        <div className="flex items-center gap-1.5 text-sm">
+          <Switch
+            id="show-hidden"
+            checked={showHidden}
+            onCheckedChange={setShowHidden}
+          />
+          <label
+            htmlFor="show-hidden"
+            className="cursor-pointer text-muted-foreground select-none"
+          >
+            Show hidden
+          </label>
+          {archivedLoading && (
+            <span className="text-xs text-muted-foreground">Loading...</span>
+          )}
+          {archivedError && (
+            <span className="text-xs text-muted-foreground">
+              Couldn't load hidden tasks: {archivedError}
+            </span>
+          )}
+        </div>
       </div>
 
       {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
@@ -323,11 +379,15 @@ export function TaskBoard({
                 setTaskParent(selectedTask.id, epicId, userStoryId)
               }
               onArchive={async () => {
-                await archiveTask(selectedTask.id);
+                await handleArchiveTask(selectedTask.id);
+                closeTaskDialog();
+              }}
+              onUnarchive={async () => {
+                await handleUnarchiveTask(selectedTask.id);
                 closeTaskDialog();
               }}
               onDelete={async () => {
-                await deleteTask(selectedTask.id);
+                await handleDeleteTask(selectedTask.id, selectedTask.archived);
                 closeTaskDialog();
               }}
             />

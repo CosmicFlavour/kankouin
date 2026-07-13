@@ -58,4 +58,16 @@ describe("TaskColumn", () => {
 
     expect(onSelectTask).toHaveBeenCalledWith("t1");
   });
+
+  it("marks an archived task's card as archived and still selectable", () => {
+    const { onSelectTask } = renderColumn([
+      makeTask({ id: "t1", title: "Old task", archived: true }),
+    ]);
+
+    expect(screen.getByText(/^Archived —/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Old task"));
+
+    expect(onSelectTask).toHaveBeenCalledWith("t1");
+  });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArchiveIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, Trash2Icon } from "lucide-react";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import type { Tag, TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
@@ -56,6 +56,7 @@ interface TaskDetailPanelProps {
     userStoryId: string | null,
   ) => Promise<void>;
   onArchive: () => Promise<void>;
+  onUnarchive: () => Promise<void>;
   onDelete: () => Promise<void>;
 }
 
@@ -72,6 +73,7 @@ export function TaskDetailPanel({
   onChangeTags,
   onChangeParent,
   onArchive,
+  onUnarchive,
   onDelete,
 }: TaskDetailPanelProps) {
   const [titleDraft, setTitleDraft] = useState(task.title);
@@ -219,6 +221,17 @@ export function TaskDetailPanel({
     }
   }
 
+  // No confirmation needed: restoring is the reversible side of archive,
+  // not a destructive action.
+  async function handleUnarchive() {
+    setDangerError(null);
+    try {
+      await onUnarchive();
+    } catch (err) {
+      setDangerError(String(err));
+    }
+  }
+
   async function handleDelete() {
     setDangerError(null);
     const confirmed = await confirm(
@@ -243,10 +256,12 @@ export function TaskDetailPanel({
               type="button"
               variant="ghost"
               size="icon-sm"
-              onClick={handleArchive}
+              onClick={task.archived ? handleUnarchive : handleArchive}
             >
-              <ArchiveIcon />
-              <span className="sr-only">Archive</span>
+              {task.archived ? <ArchiveRestoreIcon /> : <ArchiveIcon />}
+              <span className="sr-only">
+                {task.archived ? "Restore" : "Archive"}
+              </span>
             </Button>
             <Button
               type="button"

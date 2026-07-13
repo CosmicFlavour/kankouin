@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 export interface Tag {
@@ -61,6 +61,23 @@ export function useTasks(projectId: string | null) {
     return () => {
       cancelled = true;
     };
+  }, [projectId]);
+
+  // Exposed so callers outside this hook's own effect (e.g. restoring an
+  // archived task, which changes what list_tasks returns from a different
+  // hook instance) can pull a fresh list on demand. Deliberately not shared
+  // with the effect above: that effect's own `cancelled` guard around
+  // setTasks protects against a stale response overwriting a newer
+  // projectId's data, which a function reused by one-off external callers
+  // can't replicate.
+  const refresh = useCallback(async () => {
+    if (!projectId) {
+      setTasks([]);
+      return;
+    }
+    const result = await invoke<TaskSummary[]>("list_tasks", { projectId });
+    setTasks(result);
+    return result;
   }, [projectId]);
 
   async function createTask(
@@ -169,6 +186,7 @@ export function useTasks(projectId: string | null) {
     tasks,
     loading,
     error,
+    refresh,
     createTask,
     moveTask,
     updateTask,

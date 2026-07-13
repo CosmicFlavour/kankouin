@@ -19,13 +19,12 @@ export function TaskCard({
   onSelect: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id: task.id });
+    useDraggable({ id: task.id, disabled: task.archived });
 
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
-      {...attributes}
+      {...(task.archived ? {} : { ...listeners, ...attributes })}
       onClick={onSelect}
       style={
         transform
@@ -33,12 +32,16 @@ export function TaskCard({
           : undefined
       }
       className={cn(
-        "flex cursor-grab flex-col gap-1 rounded-md border px-3 py-2 text-sm active:cursor-grabbing",
+        "flex flex-col gap-1 rounded-md border px-3 py-2 text-sm",
+        task.archived
+          ? "cursor-pointer opacity-50"
+          : "cursor-grab active:cursor-grabbing",
         priorityCardClassName(task.priority),
         isDragging && "opacity-50",
       )}
     >
       <span className="text-xs text-muted-foreground">
+        {task.archived ? "Archived — " : ""}
         {taskHierarchyBreadcrumb(task, epics, userStories)}
       </span>
       <span>{task.title}</span>

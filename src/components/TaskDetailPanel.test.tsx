@@ -19,6 +19,7 @@ function makeHandlers() {
     onChangeTags: vi.fn().mockResolvedValue(undefined),
     onChangeParent: vi.fn().mockResolvedValue(undefined),
     onArchive: vi.fn().mockResolvedValue(undefined),
+    onUnarchive: vi.fn().mockResolvedValue(undefined),
     onDelete: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -394,6 +395,35 @@ describe("TaskDetailPanel — archive and delete", () => {
     mockConfirm.mockResolvedValue(true);
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("Error: boom")).toBeInTheDocument();
+  });
+});
+
+describe("TaskDetailPanel — restore", () => {
+  it("shows Restore instead of Archive for an archived task", () => {
+    renderPanel({ archived: true });
+
+    expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Restore" })).toBeInTheDocument();
+  });
+
+  it("restoring calls onUnarchive without asking for confirmation", async () => {
+    const user = userEvent.setup();
+    const { handlers } = renderPanel({ archived: true });
+
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+
+    expect(mockConfirm).not.toHaveBeenCalled();
+    expect(handlers.onUnarchive).toHaveBeenCalled();
+  });
+
+  it("shows an error when restoring fails", async () => {
+    const user = userEvent.setup();
+    const { handlers } = renderPanel({ archived: true });
+    handlers.onUnarchive.mockRejectedValue(new Error("boom"));
+
+    await user.click(screen.getByRole("button", { name: "Restore" }));
 
     expect(await screen.findByText("Error: boom")).toBeInTheDocument();
   });

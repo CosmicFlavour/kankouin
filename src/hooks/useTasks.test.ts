@@ -71,6 +71,27 @@ describe("useTasks", () => {
     expect(result.current.tasks).toEqual([taskB]);
   });
 
+  it("refresh re-fetches the task list on demand", async () => {
+    let calls = 0;
+    mockCommands({
+      list_tasks: () => {
+        calls += 1;
+        return [makeTask({ id: `t${calls}` })];
+      },
+    });
+
+    const { result } = renderHook(() => useTasks("project-1"));
+    await waitFor(() =>
+      expect(result.current.tasks).toEqual([makeTask({ id: "t1" })]),
+    );
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.tasks).toEqual([makeTask({ id: "t2" })]);
+  });
+
   it("createTask appends a new summary with empty tags and not blocked", async () => {
     const created: Task = {
       ...makeTask({ id: "new-task", title: "New task" }),
