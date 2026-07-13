@@ -1,12 +1,20 @@
 import { useEffect, useState } from "react";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useStaleTasks } from "@/hooks/useStaleTasks";
+import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { ProjectPanel } from "@/components/ProjectPanel";
 import { TodayView } from "@/components/TodayView";
 import { DailyReviewDialog } from "@/components/DailyReviewDialog";
+import { DatabaseSetupScreen } from "@/components/DatabaseSetupScreen";
 
 function App() {
+  const {
+    status: dbStatus,
+    loading: dbStatusLoading,
+    createDatabaseFile,
+    openDatabaseFile,
+  } = useDatabaseStatus();
   const { workspaces, loading, error, createWorkspace, deleteWorkspace } =
     useWorkspaces();
   const { tasks: staleTasks, loading: staleLoading, refresh: refreshStale } =
@@ -34,6 +42,20 @@ function App() {
       setAutoOpenedReview(true);
     }
   }, [autoOpenedReview, staleLoading, staleTasks]);
+
+  if (dbStatusLoading || !dbStatus) {
+    return null;
+  }
+
+  if (dbStatus.status !== "ok") {
+    return (
+      <DatabaseSetupScreen
+        status={dbStatus}
+        onCreateDatabaseFile={createDatabaseFile}
+        onOpenDatabaseFile={openDatabaseFile}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background text-foreground">

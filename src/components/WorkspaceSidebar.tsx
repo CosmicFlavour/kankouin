@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SyncPanel } from "@/components/SyncPanel";
+import { DatabasePanel } from "@/components/DatabasePanel";
 
 interface WorkspaceSidebarProps {
   workspaces: Workspace[];
@@ -122,6 +123,7 @@ export function WorkspaceSidebar({
         ))}
       </nav>
 
+      <DatabasePanel />
       <SyncPanel />
     </aside>
   );
