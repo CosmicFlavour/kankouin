@@ -500,37 +500,6 @@ fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
     attach_tags_and_blocked(conn, tasks)
 }
 
-fn priority_rank(priority: &str) -> u8 {
-    match priority {
-        "high" => 2,
-        "medium" => 1,
-        _ => 0,
-    }
-}
-
-fn ready_to_work_on(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
-    let sql = format!("SELECT {TASK_COLUMNS} FROM tasks WHERE archived = 0 AND state != 'done'");
-    let mut stmt = conn.prepare(&sql)?;
-    let tasks = stmt
-        .query_map([], row_to_task)?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let mut summaries = attach_tags_and_blocked(conn, tasks)?;
-    summaries.retain(|s| !s.blocked);
-    summaries.sort_by(|a, b| {
-        priority_rank(&b.task.priority)
-            .cmp(&priority_rank(&a.task.priority))
-            .then_with(|| {
-                a.task
-                    .exact_date
-                    .clone()
-                    .unwrap_or_default()
-                    .cmp(&b.task.exact_date.clone().unwrap_or_default())
-            })
-    });
-    Ok(summaries)
-}
-
 fn insert_subtask(conn: &Connection, task_id: String, title: String) -> AppResult<Subtask> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
@@ -568,51 +537,6 @@ fn flip_subtask(conn: &Connection, id: String) -> AppResult<Subtask> {
         row_to_subtask,
     )
     .map_err(AppError::from)
-}
-
-fn insert_log_entry(
-    conn: &Connection,
-    task_id: String,
-    content: String,
-) -> AppResult<TaskLogEntry> {
-    let id = Uuid::new_v4().to_string();
-    let now = Utc::now().to_rfc3339();
-    conn.execute(
-        "INSERT INTO task_logs (id, task_id, entry_type, content, created_at)
-         VALUES (?1, ?2, 'note', ?3, ?4)",
-        params![id, task_id, content, now],
-    )?;
-    Ok(TaskLogEntry {
-        id,
-        task_id,
-        entry_type: "note".into(),
-        content,
-        created_at: now,
-    })
-}
-
-fn insert_dependency(conn: &Connection, task_id: String, depends_on_id: String) -> AppResult<()> {
-    if task_id == depends_on_id {
-        return Err(AppError::Invalid("a task cannot depend on itself".into()));
-    }
-    conn.execute(
-        "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_id) VALUES (?1, ?2)",
-        params![task_id, depends_on_id],
-    )?;
-    Ok(())
-}
-
-// Deliberately doesn't error on a missing row, unlike every other delete in
-// this codebase: a "blocked by" link is a soft, togglable relationship,
-// so removing one reads as "ensure it doesn't exist" rather than "delete
-// this specific record" — same idempotent spirit as `insert_dependency`'s
-// `INSERT OR IGNORE`.
-fn delete_dependency(conn: &Connection, task_id: String, depends_on_id: String) -> AppResult<()> {
-    conn.execute(
-        "DELETE FROM task_dependencies WHERE task_id = ?1 AND depends_on_id = ?2",
-        params![task_id, depends_on_id],
-    )?;
-    Ok(())
 }
 
 #[tauri::command]
@@ -719,12 +643,6 @@ pub fn list_tasks_today(state: State<AppState>) -> AppResult<Vec<TaskSummary>> {
 }
 
 #[tauri::command]
-pub fn list_ready_to_work_on(state: State<AppState>) -> AppResult<Vec<TaskSummary>> {
-    let conn = state.conn()?;
-    ready_to_work_on(&conn)
-}
-
-#[tauri::command]
 pub fn add_subtask(state: State<AppState>, task_id: String, title: String) -> AppResult<Subtask> {
     let conn = state.conn()?;
     insert_subtask(&conn, task_id, title)
@@ -734,36 +652,6 @@ pub fn add_subtask(state: State<AppState>, task_id: String, title: String) -> Ap
 pub fn toggle_subtask(state: State<AppState>, id: String) -> AppResult<Subtask> {
     let conn = state.conn()?;
     flip_subtask(&conn, id)
-}
-
-#[tauri::command]
-pub fn add_log_entry(
-    state: State<AppState>,
-    task_id: String,
-    content: String,
-) -> AppResult<TaskLogEntry> {
-    let conn = state.conn()?;
-    insert_log_entry(&conn, task_id, content)
-}
-
-#[tauri::command]
-pub fn set_dependency(
-    state: State<AppState>,
-    task_id: String,
-    depends_on_id: String,
-) -> AppResult<()> {
-    let conn = state.conn()?;
-    insert_dependency(&conn, task_id, depends_on_id)
-}
-
-#[tauri::command]
-pub fn remove_dependency(
-    state: State<AppState>,
-    task_id: String,
-    depends_on_id: String,
-) -> AppResult<()> {
-    let conn = state.conn()?;
-    delete_dependency(&conn, task_id, depends_on_id)
 }
 
 #[cfg(test)]
@@ -831,7 +719,12 @@ mod tests {
         let project_id = make_project(&conn);
         let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
         insert_subtask(&conn, task.id.clone(), "Sub".into()).unwrap();
-        insert_log_entry(&conn, task.id.clone(), "Note".into()).unwrap();
+        conn.execute(
+            "INSERT INTO task_logs (id, task_id, entry_type, content, created_at)
+             VALUES ('log-1', ?1, 'note', 'Note', datetime('now'))",
+            params![task.id],
+        )
+        .unwrap();
 
         delete(&conn, task.id.clone()).unwrap();
 
@@ -968,7 +861,11 @@ mod tests {
         )
         .unwrap();
 
-        insert_dependency(&conn, blocked_task.id.clone(), blocker.id.clone()).unwrap();
+        conn.execute(
+            "INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (?1, ?2)",
+            params![blocked_task.id, blocker.id],
+        )
+        .unwrap();
 
         let listed = list(&conn, project_id.clone()).unwrap();
         let blocked_summary = listed
@@ -976,9 +873,6 @@ mod tests {
             .find(|s| s.task.id == blocked_task.id)
             .unwrap();
         assert!(blocked_summary.blocked);
-
-        let ready = ready_to_work_on(&conn).unwrap();
-        assert!(!ready.iter().any(|s| s.task.id == blocked_task.id));
 
         update_state(&mut conn, blocker.id.clone(), "done".into()).unwrap();
 
@@ -988,12 +882,10 @@ mod tests {
             .find(|s| s.task.id == blocked_task.id)
             .unwrap();
         assert!(!blocked_summary.blocked);
-
-        delete_dependency(&conn, blocked_task.id, blocker.id).unwrap();
     }
 
     #[test]
-    fn subtasks_and_log_entries() {
+    fn subtasks_toggle() {
         let conn = test_connection();
         let project_id = make_project(&conn);
         let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
@@ -1003,42 +895,8 @@ mod tests {
         let toggled = flip_subtask(&conn, subtask.id.clone()).unwrap();
         assert!(toggled.done);
 
-        insert_log_entry(&conn, task.id.clone(), "tried X".into()).unwrap();
-
         let detail = get_detail(&conn, task.id).unwrap();
         assert_eq!(detail.subtasks.len(), 1);
-        assert!(detail.logs.iter().any(|l| l.content == "tried X"));
-    }
-
-    #[test]
-    fn ready_to_work_on_sorts_by_priority() {
-        let conn = test_connection();
-        let project_id = make_project(&conn);
-        create(
-            &conn,
-            project_id.clone(),
-            "Low".into(),
-            None,
-            None,
-            None,
-            Some("low".into()),
-        )
-        .unwrap();
-        create(
-            &conn,
-            project_id.clone(),
-            "High".into(),
-            None,
-            None,
-            None,
-            Some("high".into()),
-        )
-        .unwrap();
-        create(&conn, project_id, "Medium".into(), None, None, None, None).unwrap();
-
-        let ready = ready_to_work_on(&conn).unwrap();
-        let titles: Vec<&str> = ready.iter().map(|s| s.task.title.as_str()).collect();
-        assert_eq!(titles, vec!["High", "Medium", "Low"]);
     }
 
     #[test]

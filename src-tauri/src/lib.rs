@@ -9,11 +9,6 @@ use db::AppState;
 use std::sync::Mutex;
 use tauri::Manager;
 
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -28,7 +23,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            greet,
             commands::workspaces::list_workspaces,
             commands::workspaces::create_workspace,
             commands::workspaces::update_workspace,
@@ -50,7 +44,6 @@ pub fn run() {
             commands::tags::create_tag,
             commands::tags::delete_tag,
             commands::tags::set_task_tags,
-            commands::tags::list_tasks_by_tag,
             commands::tasks::list_tasks,
             commands::tasks::get_task,
             commands::tasks::create_task,
@@ -61,16 +54,9 @@ pub fn run() {
             commands::tasks::archive_task,
             commands::tasks::delete_task,
             commands::tasks::list_tasks_today,
-            commands::tasks::list_ready_to_work_on,
             commands::tasks::add_subtask,
             commands::tasks::toggle_subtask,
-            commands::tasks::add_log_entry,
-            commands::tasks::set_dependency,
-            commands::tasks::remove_dependency,
             commands::daily_review::get_stale_tasks,
-            commands::sync::export_encrypted,
-            commands::sync::import_encrypted,
-            commands::sync::get_sync_status,
             commands::settings::get_settings,
             commands::settings::set_last_sync_file_path,
             commands::settings::set_theme,

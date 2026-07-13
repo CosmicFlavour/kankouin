@@ -2,10 +2,9 @@ use rusqlite::{params, Connection};
 use tauri::State;
 use uuid::Uuid;
 
-use crate::commands::tasks;
 use crate::db::AppState;
 use crate::error::{AppError, AppResult};
-use crate::models::{Tag, TaskSummary};
+use crate::models::Tag;
 
 fn row_to_tag(row: &rusqlite::Row) -> rusqlite::Result<Tag> {
     Ok(Tag {
@@ -66,21 +65,6 @@ fn replace_task_tags(
     Ok(())
 }
 
-fn tasks_for_tag(conn: &Connection, tag_id: String) -> AppResult<Vec<TaskSummary>> {
-    let mut stmt = conn.prepare(
-        "SELECT t.id, t.project_id, t.epic_id, t.user_story_id, t.title, t.description, t.state,
-                t.priority, t.deadline_type, t.exact_date, t.fuzzy_bucket, t.bucket_period,
-                t.state_since, t.archived, t.created_at, t.updated_at
-         FROM tasks t JOIN task_tags tt ON tt.task_id = t.id
-         WHERE tt.tag_id = ?1 AND t.archived = 0
-         ORDER BY t.created_at ASC",
-    )?;
-    let tasks = stmt
-        .query_map(params![tag_id], tasks::row_to_task)?
-        .collect::<Result<Vec<_>, _>>()?;
-    tasks::attach_tags_and_blocked(conn, tasks)
-}
-
 #[tauri::command]
 pub fn list_tags(state: State<AppState>, workspace_id: String) -> AppResult<Vec<Tag>> {
     let conn = state.conn()?;
@@ -112,12 +96,6 @@ pub fn set_task_tags(
 ) -> AppResult<()> {
     let mut conn = state.conn()?;
     replace_task_tags(&mut conn, task_id, tag_ids)
-}
-
-#[tauri::command]
-pub fn list_tasks_by_tag(state: State<AppState>, tag_id: String) -> AppResult<Vec<TaskSummary>> {
-    let conn = state.conn()?;
-    tasks_for_tag(&conn, tag_id)
 }
 
 #[cfg(test)]
@@ -173,16 +151,20 @@ mod tests {
         let tag_a = create(&conn, workspace_id.clone(), "a".into(), "#111111".into()).unwrap();
         let tag_b = create(&conn, workspace_id, "b".into(), "#222222".into()).unwrap();
 
+        let count_for_tag = |conn: &Connection, tag_id: &str| -> i64 {
+            conn.query_row(
+                "SELECT COUNT(*) FROM task_tags WHERE tag_id = ?1",
+                params![tag_id],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+
         replace_task_tags(&mut conn, task.id.clone(), vec![tag_a.id.clone()]).unwrap();
-        let by_a = tasks_for_tag(&conn, tag_a.id.clone()).unwrap();
-        assert_eq!(by_a.len(), 1);
+        assert_eq!(count_for_tag(&conn, &tag_a.id), 1);
 
         replace_task_tags(&mut conn, task.id.clone(), vec![tag_b.id.clone()]).unwrap();
-        let by_a_after = tasks_for_tag(&conn, tag_a.id).unwrap();
-        assert_eq!(by_a_after.len(), 0);
-        let by_b = tasks_for_tag(&conn, tag_b.id).unwrap();
-        assert_eq!(by_b.len(), 1);
-        assert_eq!(by_b[0].tags.len(), 1);
-        assert_eq!(by_b[0].tags[0].name, "b");
+        assert_eq!(count_for_tag(&conn, &tag_a.id), 0);
+        assert_eq!(count_for_tag(&conn, &tag_b.id), 1);
     }
 }
