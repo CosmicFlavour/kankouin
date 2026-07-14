@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::{Datelike, Duration, Utc};
+use chrono::{DateTime, Datelike, Duration, Utc};
 use rusqlite::{params, Connection};
 use tauri::State;
 use uuid::Uuid;
@@ -471,6 +471,39 @@ fn delete(conn: &Connection, id: String) -> AppResult<()> {
     Ok(())
 }
 
+// How close to the end of its fuzzy period a this_month/this_quarter task
+// needs to be before it counts as urgent enough for "Today / This Week".
+// this_week has no threshold: the whole bucket is always in scope, however
+// stale (see task_due_soon).
+const THIS_MONTH_DUE_SOON_DAYS: i64 = 7;
+const THIS_QUARTER_DUE_SOON_DAYS: i64 = 14;
+
+// Exact-date tasks are already filtered by the SQL in list_today (<=
+// end-of-week, which includes anything overdue). Fuzzy-bucketed tasks need
+// Rust-side date math against their stamped bucket_period, since a bucket
+// like this_month only becomes urgent once little of its period remains —
+// and stays urgent (never excluded again) once that period has fully
+// elapsed without the task being resolved.
+fn task_due_soon(task: &Task, now: DateTime<Utc>) -> bool {
+    if task.deadline_type.as_deref() == Some("exact") {
+        return true;
+    }
+    match task.fuzzy_bucket.as_deref() {
+        Some("this_week") => true,
+        Some("this_month") => task
+            .bucket_period
+            .as_deref()
+            .and_then(|period| crate::dates::days_until_period_end(period, now))
+            .is_some_and(|days| days <= THIS_MONTH_DUE_SOON_DAYS),
+        Some("this_quarter") => task
+            .bucket_period
+            .as_deref()
+            .and_then(|period| crate::dates::days_until_period_end(period, now))
+            .is_some_and(|days| days <= THIS_QUARTER_DUE_SOON_DAYS),
+        _ => false,
+    }
+}
+
 fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
     let now = Utc::now();
     let days_from_monday = now.weekday().num_days_from_monday() as i64;
@@ -480,13 +513,18 @@ fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
 
     let sql = format!(
         "SELECT {TASK_COLUMNS} FROM tasks
-         WHERE deadline_type = 'exact' AND exact_date <= ?1 AND archived = 0 AND state != 'done'
+         WHERE archived = 0 AND state != 'done'
+           AND (
+             (deadline_type = 'exact' AND exact_date <= ?1)
+             OR (deadline_type = 'fuzzy' AND fuzzy_bucket IN ('this_week', 'this_month', 'this_quarter'))
+           )
          ORDER BY exact_date ASC"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let tasks = stmt
+    let mut tasks = stmt
         .query_map(params![end_of_week], row_to_task)?
         .collect::<Result<Vec<_>, _>>()?;
+    tasks.retain(|t| task_due_soon(t, now));
     attach_tags_and_blocked(conn, tasks)
 }
 
@@ -665,6 +703,7 @@ mod tests {
     use crate::commands::projects;
     use crate::commands::workspaces;
     use crate::db::test_connection;
+    use chrono::TimeZone;
 
     fn make_project(conn: &Connection) -> String {
         let workspace_id = workspaces::create(conn, "WS".into(), None, None)
@@ -946,7 +985,7 @@ mod tests {
     }
 
     #[test]
-    fn list_today_includes_overdue_and_this_week_only() {
+    fn list_today_includes_overdue_exact_dates_and_fuzzy_this_week() {
         let mut conn = test_connection();
         let project_id = make_project(&conn);
 
@@ -1037,10 +1076,10 @@ mod tests {
         .unwrap();
         update_state(&mut conn, done_task.id.clone(), "done".into()).unwrap();
 
-        let fuzzy = create(
+        let fuzzy_this_week = create(
             &conn,
             project_id.clone(),
-            "Fuzzy".into(),
+            "Fuzzy this week".into(),
             None,
             None,
             None,
@@ -1049,10 +1088,29 @@ mod tests {
         .unwrap();
         apply_deadline(
             &conn,
-            fuzzy.id.clone(),
+            fuzzy_this_week.id.clone(),
             "fuzzy".into(),
             None,
             Some("this_week".into()),
+        )
+        .unwrap();
+
+        let fuzzy_someday = create(
+            &conn,
+            project_id.clone(),
+            "Fuzzy someday".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        apply_deadline(
+            &conn,
+            fuzzy_someday.id.clone(),
+            "fuzzy".into(),
+            None,
+            Some("someday".into()),
         )
         .unwrap();
 
@@ -1088,13 +1146,130 @@ mod tests {
             "done task should be excluded"
         );
         assert!(
-            !ids.contains(&fuzzy.id.as_str()),
-            "fuzzy-deadline task should be excluded"
+            ids.contains(&fuzzy_this_week.id.as_str()),
+            "fuzzy this_week task should show"
+        );
+        assert!(
+            !ids.contains(&fuzzy_someday.id.as_str()),
+            "fuzzy someday task should be excluded"
         );
         assert!(
             !ids.contains(&archived_task.id.as_str()),
             "archived task should be excluded"
         );
+    }
+
+    #[test]
+    fn task_due_soon_treats_exact_deadlines_as_always_due() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 24, 0, 0, 0).unwrap();
+        let task = Task {
+            id: "t".into(),
+            project_id: "p".into(),
+            epic_id: None,
+            user_story_id: None,
+            title: "T".into(),
+            description: None,
+            state: "todo".into(),
+            priority: "medium".into(),
+            deadline_type: Some("exact".into()),
+            exact_date: Some("2020-01-01".into()),
+            fuzzy_bucket: None,
+            bucket_period: None,
+            state_since: "2026-01-01T00:00:00Z".into(),
+            archived: false,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+        };
+        assert!(task_due_soon(&task, now));
+    }
+
+    fn fuzzy_task(fuzzy_bucket: &str, bucket_period: Option<&str>) -> Task {
+        Task {
+            id: "t".into(),
+            project_id: "p".into(),
+            epic_id: None,
+            user_story_id: None,
+            title: "T".into(),
+            description: None,
+            state: "todo".into(),
+            priority: "medium".into(),
+            deadline_type: Some("fuzzy".into()),
+            exact_date: None,
+            fuzzy_bucket: Some(fuzzy_bucket.into()),
+            bucket_period: bucket_period.map(String::from),
+            state_since: "2026-01-01T00:00:00Z".into(),
+            archived: false,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn task_due_soon_treats_this_week_as_always_due_even_if_stale() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 24, 0, 0, 0).unwrap();
+        // A this_week bucket stamped five weeks ago — long past its own
+        // week, and no ISO-week arithmetic backs this check, so it should
+        // still count as due.
+        let task = fuzzy_task("this_week", Some("2026-W22"));
+        assert!(task_due_soon(&task, now));
+    }
+
+    #[test]
+    fn task_due_soon_includes_this_month_only_within_the_last_week() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 24, 0, 0, 0).unwrap();
+        // July 2026 ends the 31st: 7 days out from the 24th, right at the
+        // THIS_MONTH_DUE_SOON_DAYS threshold.
+        assert!(task_due_soon(
+            &fuzzy_task("this_month", Some("2026-07")),
+            now
+        ));
+        // June already ended — well past its own period, still due.
+        assert!(task_due_soon(
+            &fuzzy_task("this_month", Some("2026-06")),
+            now
+        ));
+    }
+
+    #[test]
+    fn task_due_soon_excludes_this_month_far_from_its_end() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 10, 0, 0, 0).unwrap();
+        // 21 days left in July — well outside the 7-day threshold.
+        assert!(!task_due_soon(
+            &fuzzy_task("this_month", Some("2026-07")),
+            now
+        ));
+    }
+
+    #[test]
+    fn task_due_soon_includes_this_quarter_only_within_the_last_two_weeks() {
+        let now = Utc.with_ymd_and_hms(2026, 9, 16, 0, 0, 0).unwrap();
+        // Q3 2026 ends September 30th: 14 days out, right at the
+        // THIS_QUARTER_DUE_SOON_DAYS threshold.
+        assert!(task_due_soon(
+            &fuzzy_task("this_quarter", Some("2026-Q3")),
+            now
+        ));
+        // Q2 already ended — well past its own period, still due.
+        assert!(task_due_soon(
+            &fuzzy_task("this_quarter", Some("2026-Q2")),
+            now
+        ));
+    }
+
+    #[test]
+    fn task_due_soon_excludes_this_quarter_far_from_its_end() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 15, 0, 0, 0).unwrap();
+        // Over two months left in Q3 — well outside the 14-day threshold.
+        assert!(!task_due_soon(
+            &fuzzy_task("this_quarter", Some("2026-Q3")),
+            now
+        ));
+    }
+
+    #[test]
+    fn task_due_soon_excludes_someday() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 24, 0, 0, 0).unwrap();
+        assert!(!task_due_soon(&fuzzy_task("someday", None), now));
     }
 
     #[test]
