@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { XIcon } from "lucide-react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@/hooks/useConfirm";
 import type { Tag } from "@/hooks/useTasks";
 import { useTags } from "@/hooks/useTags";
 import { Button } from "@/components/ui/button";

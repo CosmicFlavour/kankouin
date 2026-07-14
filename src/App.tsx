@@ -8,6 +8,7 @@ import { TodayView } from "@/components/TodayView";
 import { DailyReviewDialog } from "@/components/DailyReviewDialog";
 import { DatabaseSetupScreen } from "@/components/DatabaseSetupScreen";
 import { Toaster } from "@/components/Toaster";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 function App() {
   const {
@@ -56,6 +57,7 @@ function App() {
           onOpenDatabaseFile={openDatabaseFile}
         />
         <Toaster />
+        <ConfirmDialog />
       </>
     );
   }
@@ -123,6 +125,7 @@ function App() {
         onFinished={refreshStale}
       />
       <Toaster />
+      <ConfirmDialog />
     </div>
   );
 }

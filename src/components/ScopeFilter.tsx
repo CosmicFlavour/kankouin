@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Trash2Icon } from "lucide-react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@/hooks/useConfirm";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";

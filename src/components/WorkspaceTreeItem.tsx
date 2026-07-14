@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRightIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@/hooks/useConfirm";
 import { useProjects } from "@/hooks/useProjects";
 import { useArchivedProjects } from "@/hooks/useArchivedProjects";
 import type { Workspace } from "@/hooks/useWorkspaces";

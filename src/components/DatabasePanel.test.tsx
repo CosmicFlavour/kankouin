@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DatabasePanel } from "./DatabasePanel";
-import { mockInvoke, mockCommands, mockOpen, mockSave, mockConfirm } from "@/test/tauriMock";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { mockInvoke, mockCommands, mockOpen, mockSave } from "@/test/tauriMock";
+import { acceptConfirm, declineConfirm } from "@/test/confirmDialog";
 
 function mockLocationReload() {
   const reload = vi.fn();
@@ -15,7 +17,12 @@ function mockLocationReload() {
 
 async function renderPanel() {
   const user = userEvent.setup();
-  render(<DatabasePanel />);
+  render(
+    <>
+      <DatabasePanel />
+      <ConfirmDialog />
+    </>,
+  );
   await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith("get_database_status"));
   return user;
 }
@@ -44,12 +51,11 @@ describe("DatabasePanel", () => {
       get_database_status: () => ({ status: "ok", path: "/home/user/kankouin.sqlite3" }),
     });
     mockSave.mockResolvedValue("/home/user/new.sqlite3");
-    mockConfirm.mockResolvedValue(false);
     const user = await renderPanel();
 
     await user.click(screen.getByRole("button", { name: "Create a new database" }));
+    await declineConfirm(user);
 
-    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
     expect(mockInvoke).not.toHaveBeenCalledWith(
       "create_database_file",
       expect.anything(),
@@ -62,11 +68,11 @@ describe("DatabasePanel", () => {
       create_database_file: (args) => ({ status: "ok", path: args?.path }),
     });
     mockSave.mockResolvedValue("/home/user/new.sqlite3");
-    mockConfirm.mockResolvedValue(true);
     const reload = mockLocationReload();
     const user = await renderPanel();
 
     await user.click(screen.getByRole("button", { name: "Create a new database" }));
+    await acceptConfirm(user);
 
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith("create_database_file", {
@@ -82,11 +88,11 @@ describe("DatabasePanel", () => {
       open_database_file: (args) => ({ status: "ok", path: args?.path }),
     });
     mockOpen.mockResolvedValue("/home/user/other.sqlite3");
-    mockConfirm.mockResolvedValue(true);
     const reload = mockLocationReload();
     const user = await renderPanel();
 
     await user.click(screen.getByRole("button", { name: "Open a different database" }));
+    await acceptConfirm(user);
 
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith("open_database_file", {
@@ -104,11 +110,11 @@ describe("DatabasePanel", () => {
       },
     });
     mockOpen.mockResolvedValue("/home/user/bad.sqlite3");
-    mockConfirm.mockResolvedValue(true);
     const reload = mockLocationReload();
     const user = await renderPanel();
 
     await user.click(screen.getByRole("button", { name: "Open a different database" }));
+    await acceptConfirm(user);
 
     expect(await screen.findByText("Error: not a database file")).toBeInTheDocument();
     expect(reload).not.toHaveBeenCalled();

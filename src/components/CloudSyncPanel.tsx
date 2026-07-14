@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@/hooks/useConfirm";
 import { useCloudSync } from "@/hooks/useCloudSync";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { PencilIcon, Trash2Icon } from "lucide-react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@/hooks/useConfirm";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
@@ -98,7 +98,7 @@ function ManageableItemRow({
             className="h-7"
           />
         ) : (
-          <p className="flex-1 truncate px-1.5 py-1 text-sm">
+          <p className="min-w-0 flex-1 truncate px-1.5 py-1 text-sm">
             {displayLabel ?? title}
           </p>
         )}
@@ -183,7 +183,7 @@ export function ManageEpicsStoriesPanel({
           <DialogTitle>Manage epics & user stories</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
+        <div className="min-w-0 flex flex-col gap-4">
           <section className="flex flex-col gap-1">
             <h3 className="text-sm font-medium text-muted-foreground">
               Epics

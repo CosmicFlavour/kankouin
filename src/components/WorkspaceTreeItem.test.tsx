@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { WorkspaceTreeItem } from "./WorkspaceTreeItem";
-import { mockCommands, mockConfirm } from "@/test/tauriMock";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { mockCommands } from "@/test/tauriMock";
+import { acceptConfirm, declineConfirm } from "@/test/confirmDialog";
 
 const workspace = {
   id: "ws-1",
@@ -36,15 +38,18 @@ const archivedProject = {
 function renderItem(onDeleteWorkspace = vi.fn().mockResolvedValue(undefined)) {
   const user = userEvent.setup();
   render(
-    <WorkspaceTreeItem
-      workspace={workspace}
-      isSelected={false}
-      selectedProjectId={null}
-      onSelectWorkspace={vi.fn()}
-      onSelectProject={vi.fn()}
-      onDeleteWorkspace={onDeleteWorkspace}
-      projectsVersion={0}
-    />,
+    <>
+      <WorkspaceTreeItem
+        workspace={workspace}
+        isSelected={false}
+        selectedProjectId={null}
+        onSelectWorkspace={vi.fn()}
+        onSelectProject={vi.fn()}
+        onDeleteWorkspace={onDeleteWorkspace}
+        projectsVersion={0}
+      />
+      <ConfirmDialog />
+    </>,
   );
   return { user, onDeleteWorkspace };
 }
@@ -108,9 +113,9 @@ describe("WorkspaceTreeItem — delete workspace", () => {
   it("deletes only after the user confirms", async () => {
     mockCommands({ list_projects: () => [] });
     const { user, onDeleteWorkspace } = renderItem();
-    mockConfirm.mockResolvedValue(true);
 
     await user.click(screen.getByRole("button", { name: "Delete workspace" }));
+    await acceptConfirm(user);
 
     expect(onDeleteWorkspace).toHaveBeenCalledWith("ws-1");
   });
@@ -118,9 +123,9 @@ describe("WorkspaceTreeItem — delete workspace", () => {
   it("does not delete when the user declines", async () => {
     mockCommands({ list_projects: () => [] });
     const { user, onDeleteWorkspace } = renderItem();
-    mockConfirm.mockResolvedValue(false);
 
     await user.click(screen.getByRole("button", { name: "Delete workspace" }));
+    await declineConfirm(user);
 
     expect(onDeleteWorkspace).not.toHaveBeenCalled();
   });
@@ -129,9 +134,9 @@ describe("WorkspaceTreeItem — delete workspace", () => {
     mockCommands({ list_projects: () => [] });
     const onDeleteWorkspace = vi.fn().mockRejectedValue(new Error("boom"));
     const { user } = renderItem(onDeleteWorkspace);
-    mockConfirm.mockResolvedValue(true);
 
     await user.click(screen.getByRole("button", { name: "Delete workspace" }));
+    await acceptConfirm(user);
 
     expect(await screen.findByText("Error: boom")).toBeInTheDocument();
   });

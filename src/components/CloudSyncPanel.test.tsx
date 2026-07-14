@@ -3,7 +3,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CloudSyncPanel } from "./CloudSyncPanel";
 import { Toaster } from "./Toaster";
-import { mockInvoke, mockCommands, mockConfirm } from "@/test/tauriMock";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { mockInvoke, mockCommands } from "@/test/tauriMock";
+import { acceptConfirm, declineConfirm } from "@/test/confirmDialog";
 
 function mockLocationReload() {
   const reload = vi.fn();
@@ -20,6 +22,7 @@ async function renderPanel() {
     <>
       <CloudSyncPanel />
       <Toaster />
+      <ConfirmDialog />
     </>,
   );
   await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith("get_cloud_status"));
@@ -123,22 +126,21 @@ describe("CloudSyncPanel — connected with a passphrase", () => {
 
   it("does nothing on pull when the overwrite confirmation is declined", async () => {
     mockConnectedWithPassphrase();
-    mockConfirm.mockResolvedValue(false);
     const user = await renderPanel();
 
     await user.click(await screen.findByRole("button", { name: "Pull" }));
+    await declineConfirm(user);
 
-    await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
     expect(mockInvoke).not.toHaveBeenCalledWith("pull_from_cloud");
   });
 
   it("pulls and reloads once the overwrite is confirmed", async () => {
     mockConnectedWithPassphrase({ pull_from_cloud: () => undefined });
-    mockConfirm.mockResolvedValue(true);
     const reload = mockLocationReload();
     const user = await renderPanel();
 
     await user.click(await screen.findByRole("button", { name: "Pull" }));
+    await acceptConfirm(user);
 
     expect(await screen.findByText("Synced from cloud")).toBeInTheDocument();
     expect(mockInvoke).toHaveBeenCalledWith("pull_from_cloud");

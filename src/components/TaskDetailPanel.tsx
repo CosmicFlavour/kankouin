@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArchiveIcon, ArchiveRestoreIcon, Trash2Icon } from "lucide-react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@/hooks/useConfirm";
 import type { Tag, TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";

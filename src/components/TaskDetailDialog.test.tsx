@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TaskDetailDialog } from "./TaskDetailDialog";
-import { mockCommands, mockConfirm } from "@/test/tauriMock";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { mockCommands } from "@/test/tauriMock";
+import { acceptConfirm } from "@/test/confirmDialog";
 import { makeTask } from "@/test/factories";
 
 function baseMocks(
@@ -52,40 +54,46 @@ describe("TaskDetailDialog", () => {
 
   it("closes the dialog after archiving is confirmed", async () => {
     baseMocks({}, { archive_task: () => undefined });
-    mockConfirm.mockResolvedValue(true);
     const onOpenChange = vi.fn();
     const user = userEvent.setup();
     render(
-      <TaskDetailDialog
-        projectId="project-1"
-        workspaceId="ws-1"
-        taskId="t1"
-        onOpenChange={onOpenChange}
-      />,
+      <>
+        <TaskDetailDialog
+          projectId="project-1"
+          workspaceId="ws-1"
+          taskId="t1"
+          onOpenChange={onOpenChange}
+        />
+        <ConfirmDialog />
+      </>,
     );
     await screen.findByText("Ship the thing");
 
     await user.click(screen.getByRole("button", { name: "Archive" }));
+    await acceptConfirm(user);
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
   it("closes the dialog after deletion is confirmed", async () => {
     baseMocks({}, { delete_task: () => undefined });
-    mockConfirm.mockResolvedValue(true);
     const onOpenChange = vi.fn();
     const user = userEvent.setup();
     render(
-      <TaskDetailDialog
-        projectId="project-1"
-        workspaceId="ws-1"
-        taskId="t1"
-        onOpenChange={onOpenChange}
-      />,
+      <>
+        <TaskDetailDialog
+          projectId="project-1"
+          workspaceId="ws-1"
+          taskId="t1"
+          onOpenChange={onOpenChange}
+        />
+        <ConfirmDialog />
+      </>,
     );
     await screen.findByText("Ship the thing");
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
+    await acceptConfirm(user);
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });

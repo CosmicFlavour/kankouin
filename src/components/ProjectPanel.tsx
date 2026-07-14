@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FolderTreeIcon, Trash2Icon } from "lucide-react";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@/hooks/useConfirm";
 import { useProjects } from "@/hooks/useProjects";
 import { useEpics } from "@/hooks/useEpics";
 import { useUserStories } from "@/hooks/useUserStories";

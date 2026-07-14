@@ -3,7 +3,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TaskDetailPanel } from "./TaskDetailPanel";
 import { Dialog } from "@/components/ui/dialog";
-import { mockCommands, mockConfirm } from "@/test/tauriMock";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { mockCommands } from "@/test/tauriMock";
+import { acceptConfirm, declineConfirm } from "@/test/confirmDialog";
 import { makeTask, makeEpic, makeUserStory } from "@/test/factories";
 import type { TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
@@ -33,7 +35,7 @@ function renderPanel(
   // don't render "couldn't load" noise that could collide with assertions.
   mockCommands({
     list_tags: () => [],
-    get_task: () => ({ subtasks: [], tags: [], logs: [], blocked_by: [] }),
+    get_task: () => ({ subtasks: [], tags: [], blocked_by: [] }),
   });
   const task = makeTask({ id: "t1", title: "Ship the thing", ...taskOverrides });
   const handlers = makeHandlers();
@@ -43,15 +45,20 @@ function renderPanel(
     // context, same as when TaskBoard renders it inside its own <Dialog>.
     // onOpenChange is wired up so the "Apply" button's DialogClose can be
     // observed closing the dialog, same as TaskBoard's real one would.
-    <Dialog open onOpenChange={onOpenChange}>
-      <TaskDetailPanel
-        task={task}
-        workspaceId="ws-1"
-        epics={epics}
-        userStories={userStories}
-        {...handlers}
-      />
-    </Dialog>,
+    // ConfirmDialog is rendered alongside so archive/delete's confirm()
+    // calls have something to resolve against.
+    <>
+      <Dialog open onOpenChange={onOpenChange}>
+        <TaskDetailPanel
+          task={task}
+          workspaceId="ws-1"
+          epics={epics}
+          userStories={userStories}
+          {...handlers}
+        />
+      </Dialog>
+      <ConfirmDialog />
+    </>,
   );
   return { task, handlers, onOpenChange };
 }
@@ -338,20 +345,19 @@ describe("TaskDetailPanel — archive and delete", () => {
   it("archiving calls onArchive only after the user confirms", async () => {
     const user = userEvent.setup();
     const { handlers } = renderPanel();
-    mockConfirm.mockResolvedValue(true);
 
     await user.click(screen.getByRole("button", { name: "Archive" }));
+    await acceptConfirm(user);
 
-    expect(mockConfirm).toHaveBeenCalled();
     expect(handlers.onArchive).toHaveBeenCalled();
   });
 
   it("declining the archive confirmation does not call onArchive", async () => {
     const user = userEvent.setup();
     const { handlers } = renderPanel();
-    mockConfirm.mockResolvedValue(false);
 
     await user.click(screen.getByRole("button", { name: "Archive" }));
+    await declineConfirm(user);
 
     expect(handlers.onArchive).not.toHaveBeenCalled();
   });
@@ -360,9 +366,9 @@ describe("TaskDetailPanel — archive and delete", () => {
     const user = userEvent.setup();
     const { handlers } = renderPanel();
     handlers.onArchive.mockRejectedValue(new Error("boom"));
-    mockConfirm.mockResolvedValue(true);
 
     await user.click(screen.getByRole("button", { name: "Archive" }));
+    await acceptConfirm(user);
 
     expect(await screen.findByText("Error: boom")).toBeInTheDocument();
   });
@@ -370,20 +376,19 @@ describe("TaskDetailPanel — archive and delete", () => {
   it("deleting calls onDelete only after the user confirms", async () => {
     const user = userEvent.setup();
     const { handlers } = renderPanel();
-    mockConfirm.mockResolvedValue(true);
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
+    await acceptConfirm(user);
 
-    expect(mockConfirm).toHaveBeenCalled();
     expect(handlers.onDelete).toHaveBeenCalled();
   });
 
   it("declining the delete confirmation does not call onDelete", async () => {
     const user = userEvent.setup();
     const { handlers } = renderPanel();
-    mockConfirm.mockResolvedValue(false);
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
+    await declineConfirm(user);
 
     expect(handlers.onDelete).not.toHaveBeenCalled();
   });
@@ -392,9 +397,9 @@ describe("TaskDetailPanel — archive and delete", () => {
     const user = userEvent.setup();
     const { handlers } = renderPanel();
     handlers.onDelete.mockRejectedValue(new Error("boom"));
-    mockConfirm.mockResolvedValue(true);
 
     await user.click(screen.getByRole("button", { name: "Delete" }));
+    await acceptConfirm(user);
 
     expect(await screen.findByText("Error: boom")).toBeInTheDocument();
   });
@@ -414,7 +419,7 @@ describe("TaskDetailPanel — restore", () => {
 
     await user.click(screen.getByRole("button", { name: "Restore" }));
 
-    expect(mockConfirm).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(handlers.onUnarchive).toHaveBeenCalled();
   });
 

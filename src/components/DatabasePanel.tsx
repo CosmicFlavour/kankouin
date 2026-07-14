@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { open, save, confirm } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@/hooks/useConfirm";
 import { FilePlus2Icon, FolderOpenIcon } from "lucide-react";
 import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
 import { Button } from "@/components/ui/button";

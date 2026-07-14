@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { clearToasts } from "@/hooks/useToast";
+import { resetConfirm } from "@/hooks/useConfirm";
 
 // Every hook talks to the Rust backend exclusively through this function, so
 // mocking it once here (rather than per test file) is enough to isolate all
@@ -10,15 +11,14 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
-// Several components (DatabasePanel, CloudSyncPanel, and every delete/archive
-// confirmation) gate a destructive action behind the native confirm dialog. Mocking it
-// here means a test that doesn't care about it gets the safe default
-// (confirm() resolves to undefined, i.e. "cancelled") instead of hitting a
-// real Tauri plugin that doesn't exist in jsdom.
+// DatabasePanel/DatabaseSetupScreen open native file pickers to choose a
+// database file. Mocking them here means a test that doesn't care gets the
+// safe default (resolves to undefined, i.e. "cancelled") instead of hitting
+// a real Tauri plugin that doesn't exist in jsdom. Destructive-action
+// confirmations no longer go through this plugin — see useConfirm.ts.
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
   save: vi.fn(),
-  confirm: vi.fn(),
 }));
 
 // jsdom doesn't implement matchMedia; useSettings reads it as the dark-mode
@@ -65,4 +65,5 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   clearToasts();
+  resetConfirm();
 });

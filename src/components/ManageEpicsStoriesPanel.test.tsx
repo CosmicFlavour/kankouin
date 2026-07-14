@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ManageEpicsStoriesPanel } from "./ManageEpicsStoriesPanel";
-import { mockConfirm } from "@/test/tauriMock";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { acceptConfirm, declineConfirm } from "@/test/confirmDialog";
 import { makeEpic, makeUserStory } from "@/test/factories";
 
 const epic = makeEpic({ id: "epic-1", title: "Launch" });
@@ -25,20 +26,23 @@ function renderPanel(overrides: Partial<Parameters<typeof ManageEpicsStoriesPane
   const onDeleteUserStory = vi.fn().mockResolvedValue(undefined);
 
   render(
-    <ManageEpicsStoriesPanel
-      trigger={<button type="button">Manage epics & stories</button>}
-      epics={[epic]}
-      epicsLoading={false}
-      epicsError={null}
-      onRenameEpic={onRenameEpic}
-      onDeleteEpic={onDeleteEpic}
-      userStories={[storyWithEpic, storyWithoutEpic]}
-      storiesLoading={false}
-      storiesError={null}
-      onRenameUserStory={onRenameUserStory}
-      onDeleteUserStory={onDeleteUserStory}
-      {...overrides}
-    />,
+    <>
+      <ManageEpicsStoriesPanel
+        trigger={<button type="button">Manage epics & stories</button>}
+        epics={[epic]}
+        epicsLoading={false}
+        epicsError={null}
+        onRenameEpic={onRenameEpic}
+        onDeleteEpic={onDeleteEpic}
+        userStories={[storyWithEpic, storyWithoutEpic]}
+        storiesLoading={false}
+        storiesError={null}
+        onRenameUserStory={onRenameUserStory}
+        onDeleteUserStory={onDeleteUserStory}
+        {...overrides}
+      />
+      <ConfirmDialog />
+    </>,
   );
   return { user, onRenameEpic, onDeleteEpic, onRenameUserStory, onDeleteUserStory };
 }
@@ -91,9 +95,9 @@ describe("ManageEpicsStoriesPanel", () => {
     const { user, onDeleteEpic } = renderPanel();
     await openPanel(user);
     await screen.findByText("Launch");
-    mockConfirm.mockResolvedValue(true);
 
     await user.click(screen.getByRole("button", { name: "Delete Launch" }));
+    await acceptConfirm(user);
 
     expect(onDeleteEpic).toHaveBeenCalledWith("epic-1");
   });
@@ -102,9 +106,9 @@ describe("ManageEpicsStoriesPanel", () => {
     const { user, onDeleteEpic } = renderPanel();
     await openPanel(user);
     await screen.findByText("Launch");
-    mockConfirm.mockResolvedValue(false);
 
     await user.click(screen.getByRole("button", { name: "Delete Launch" }));
+    await declineConfirm(user);
 
     expect(onDeleteEpic).not.toHaveBeenCalled();
   });
