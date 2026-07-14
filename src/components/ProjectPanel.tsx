@@ -83,7 +83,7 @@ export function ProjectPanel({
   }
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">
           {workspace.name} / {project?.name ?? "..."}
