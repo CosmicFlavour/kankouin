@@ -27,7 +27,6 @@ function App() {
     null,
   );
   const [showToday, setShowToday] = useState(false);
-  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
   const [dailyReviewOpen, setDailyReviewOpen] = useState(false);
   const [autoOpenedReview, setAutoOpenedReview] = useState(false);
   // ProjectPanel and the sidebar tree each hold their own useProjects
@@ -94,16 +93,7 @@ function App() {
         projectsVersion={projectsVersion}
       />
       <main className="flex flex-1 flex-col p-6">
-        {showToday && (
-          <TodayView
-            onNavigate={(workspaceId, projectId, taskId) => {
-              setShowToday(false);
-              setSelectedWorkspaceId(workspaceId);
-              setSelectedProjectId(projectId);
-              setFocusTaskId(taskId);
-            }}
-          />
-        )}
+        {showToday && <TodayView />}
         {!showToday && !selectedWorkspace && (
           <p className="m-auto text-muted-foreground">
             Select a workspace to get started
@@ -118,8 +108,6 @@ function App() {
           <ProjectPanel
             workspace={selectedWorkspace}
             projectId={selectedProjectId}
-            focusTaskId={focusTaskId}
-            onFocusHandled={() => setFocusTaskId(null)}
             onArchived={() => {
               setSelectedProjectId(null);
               setProjectsVersion((v) => v + 1);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useTasksToday } from "./useTasksToday";
 import { mockInvoke, mockCommands } from "@/test/tauriMock";
 import { makeTask } from "@/test/factories";
@@ -26,5 +26,26 @@ describe("useTasksToday", () => {
 
     await waitFor(() => expect(result.current.error).toBe("Error: boom"));
     expect(result.current.tasks).toEqual([]);
+  });
+
+  it("refresh re-fetches the task list on demand", async () => {
+    let calls = 0;
+    mockCommands({
+      list_tasks_today: () => {
+        calls += 1;
+        return [makeTask({ id: `t${calls}` })];
+      },
+    });
+
+    const { result } = renderHook(() => useTasksToday());
+    await waitFor(() =>
+      expect(result.current.tasks).toEqual([makeTask({ id: "t1" })]),
+    );
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.tasks).toEqual([makeTask({ id: "t2" })]);
   });
 });

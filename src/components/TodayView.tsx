@@ -1,15 +1,19 @@
+import { useState } from "react";
 import { useTasksToday } from "@/hooks/useTasksToday";
 import { useProjectDirectory } from "@/hooks/useProjectDirectory";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
+import { TaskDetailDialog } from "@/components/TaskDetailDialog";
 
-interface TodayViewProps {
-  onNavigate: (workspaceId: string, projectId: string, taskId: string) => void;
-}
-
-export function TodayView({ onNavigate }: TodayViewProps) {
-  const { tasks, loading, error } = useTasksToday();
+export function TodayView() {
+  const { tasks, loading, error, refresh } = useTasksToday();
   const { directory, loading: directoryLoading, error: directoryError } =
     useProjectDirectory();
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
+  const selectedLocation = selectedTask
+    ? directory.get(selectedTask.project_id)
+    : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -37,10 +41,7 @@ export function TodayView({ onNavigate }: TodayViewProps) {
                 <button
                   key={task.id}
                   type="button"
-                  onClick={() =>
-                    location &&
-                    onNavigate(location.workspaceId, task.project_id, task.id)
-                  }
+                  onClick={() => setSelectedTaskId(task.id)}
                   disabled={!location}
                   className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50"
                 >
@@ -59,6 +60,18 @@ export function TodayView({ onNavigate }: TodayViewProps) {
           </div>
         </>
       )}
+
+      <TaskDetailDialog
+        projectId={selectedTask?.project_id ?? null}
+        workspaceId={selectedLocation?.workspaceId ?? null}
+        taskId={selectedTaskId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedTaskId(null);
+            refresh();
+          }
+        }}
+      />
     </div>
   );
 }

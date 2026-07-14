@@ -24,6 +24,7 @@ import { TagFilter } from "@/components/TagFilter";
 import { PriorityFilter } from "@/components/PriorityFilter";
 import { DeadlineFilter } from "@/components/DeadlineFilter";
 import { taskDeadlineBucket } from "@/lib/deadline";
+import { taskEditingHandlers } from "@/lib/taskEditingHandlers";
 import { NewUserStoryDialog } from "@/components/NewUserStoryDialog";
 import { NameDialog } from "@/components/NameDialog";
 
@@ -79,8 +80,6 @@ interface TaskBoardProps {
   storiesError: string | null;
   onCreateUserStory: (title: string, epicId: string | null) => Promise<unknown>;
   onDeleteUserStory: (storyId: string) => Promise<void>;
-  focusTaskId?: string | null;
-  onFocusHandled?: () => void;
 }
 
 function taskMatchesScope(
@@ -114,9 +113,8 @@ export function TaskBoard({
   storiesError,
   onCreateUserStory,
   onDeleteUserStory,
-  focusTaskId,
-  onFocusHandled,
 }: TaskBoardProps) {
+  const tasksApi = useTasks(projectId);
   const {
     tasks: allTasks,
     loading,
@@ -124,13 +122,9 @@ export function TaskBoard({
     refresh: refreshTasks,
     createTask,
     moveTask,
-    updateTask,
-    setDeadline,
-    setTaskTags,
-    setTaskParent,
     archiveTask,
     deleteTask,
-  } = useTasks(projectId);
+  } = tasksApi;
   const { tags, loading: tagsLoading, error: tagsError } = useTags(workspaceId);
   const [moveError, setMoveError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -227,13 +221,6 @@ export function TaskBoard({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
-
-  useEffect(() => {
-    if (!focusTaskId) return;
-    if (!allTasks.some((t) => t.id === focusTaskId)) return;
-    setSelectedTaskId(focusTaskId);
-    onFocusHandled?.();
-  }, [focusTaskId, allTasks, onFocusHandled]);
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -396,23 +383,7 @@ export function TaskBoard({
               workspaceId={workspaceId}
               epics={epics}
               userStories={userStories}
-              onChangeTitle={(title) => updateTask(selectedTask.id, { title })}
-              onChangeState={(state) => moveTask(selectedTask.id, state)}
-              onChangePriority={(priority) =>
-                updateTask(selectedTask.id, { priority })
-              }
-              onChangeDescription={(description) =>
-                updateTask(selectedTask.id, { description })
-              }
-              onChangeDeadline={(deadlineType, value) =>
-                setDeadline(selectedTask.id, deadlineType, value)
-              }
-              onChangeTags={(tagIds, allTags) =>
-                setTaskTags(selectedTask.id, tagIds, allTags)
-              }
-              onChangeParent={(epicId, userStoryId) =>
-                setTaskParent(selectedTask.id, epicId, userStoryId)
-              }
+              {...taskEditingHandlers(tasksApi, selectedTask.id)}
               onArchive={async () => {
                 await handleArchiveTask(selectedTask.id);
                 closeTaskDialog();

@@ -14,16 +14,12 @@ import { toast } from "@/hooks/useToast";
 interface ProjectPanelProps {
   workspace: Workspace;
   projectId: string;
-  focusTaskId?: string | null;
-  onFocusHandled?: () => void;
   onArchived?: () => void;
 }
 
 export function ProjectPanel({
   workspace,
   projectId,
-  focusTaskId,
-  onFocusHandled,
   onArchived,
 }: ProjectPanelProps) {
   const { projects, archiveProject } = useProjects(workspace.id);
@@ -130,8 +126,6 @@ export function ProjectPanel({
         storiesError={storiesError}
         onCreateUserStory={createUserStory}
         onDeleteUserStory={deleteUserStory}
-        focusTaskId={focusTaskId}
-        onFocusHandled={onFocusHandled}
       />
     </div>
   );
