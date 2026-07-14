@@ -21,6 +21,7 @@ import { TaskColumn } from "@/components/TaskColumn";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { ScopeFilter, type TaskScope } from "@/components/ScopeFilter";
 import { TagFilter } from "@/components/TagFilter";
+import { PriorityFilter } from "@/components/PriorityFilter";
 import { NewUserStoryDialog } from "@/components/NewUserStoryDialog";
 import { NameDialog } from "@/components/NameDialog";
 
@@ -133,6 +134,7 @@ export function TaskBoard({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [showHidden, setShowHidden] = useState(false);
   const {
     archivedTasks,
@@ -147,6 +149,10 @@ export function TaskBoard({
   }, [projectId]);
 
   useEffect(() => {
+    setSelectedPriorities([]);
+  }, [projectId]);
+
+  useEffect(() => {
     setShowHidden(false);
   }, [projectId]);
 
@@ -157,6 +163,11 @@ export function TaskBoard({
       (t) =>
         selectedTagIds.length === 0 ||
         t.tags.some((tag) => selectedTagIds.includes(tag.id)),
+    )
+    .filter(
+      (t) =>
+        selectedPriorities.length === 0 ||
+        selectedPriorities.includes(t.priority),
     );
   // Detail panel stays open for a task even if it falls outside the current
   // scope filter (e.g. it was opened before the scope changed).
@@ -282,6 +293,11 @@ export function TaskBoard({
           error={tagsError}
           selectedTagIds={selectedTagIds}
           onChange={setSelectedTagIds}
+        />
+
+        <PriorityFilter
+          selectedPriorities={selectedPriorities}
+          onChange={setSelectedPriorities}
         />
 
         <div className="flex items-center gap-1.5 text-sm">
