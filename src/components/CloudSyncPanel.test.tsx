@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CloudSyncPanel } from "./CloudSyncPanel";
+import { Toaster } from "./Toaster";
 import { mockInvoke, mockCommands, mockConfirm } from "@/test/tauriMock";
 
 function mockLocationReload() {
@@ -15,7 +16,12 @@ function mockLocationReload() {
 
 async function renderPanel() {
   const user = userEvent.setup();
-  render(<CloudSyncPanel />);
+  render(
+    <>
+      <CloudSyncPanel />
+      <Toaster />
+    </>,
+  );
   await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith("get_cloud_status"));
   return user;
 }
@@ -112,7 +118,7 @@ describe("CloudSyncPanel — connected with a passphrase", () => {
     await user.click(await screen.findByRole("button", { name: "Push" }));
 
     expect(mockInvoke).toHaveBeenCalledWith("push_to_cloud");
-    expect(await screen.findByText("Pushed")).toBeInTheDocument();
+    expect(await screen.findByText("Synced to cloud")).toBeInTheDocument();
   });
 
   it("does nothing on pull when the overwrite confirmation is declined", async () => {
@@ -134,9 +140,9 @@ describe("CloudSyncPanel — connected with a passphrase", () => {
 
     await user.click(await screen.findByRole("button", { name: "Pull" }));
 
-    expect(await screen.findByText("Pulled — reloading...")).toBeInTheDocument();
+    expect(await screen.findByText("Synced from cloud")).toBeInTheDocument();
     expect(mockInvoke).toHaveBeenCalledWith("pull_from_cloud");
-    expect(reload).toHaveBeenCalled();
+    await waitFor(() => expect(reload).toHaveBeenCalled());
   });
 
   it("surfaces a failed push without showing a success message", async () => {
@@ -150,7 +156,7 @@ describe("CloudSyncPanel — connected with a passphrase", () => {
     await user.click(await screen.findByRole("button", { name: "Push" }));
 
     expect(await screen.findByText("Error: Dropbox upload failed: 401")).toBeInTheDocument();
-    expect(screen.queryByText("Pushed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Synced to cloud")).not.toBeInTheDocument();
   });
 
   it("'Change passphrase' reveals the passphrase field again", async () => {

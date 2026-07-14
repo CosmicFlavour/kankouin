@@ -73,7 +73,7 @@ describe("DatabasePanel", () => {
         path: "/home/user/new.sqlite3",
       }),
     );
-    expect(reload).toHaveBeenCalled();
+    await waitFor(() => expect(reload).toHaveBeenCalled());
   });
 
   it("switches to a different opened database and reloads once confirmed", async () => {
@@ -93,7 +93,7 @@ describe("DatabasePanel", () => {
         path: "/home/user/other.sqlite3",
       }),
     );
-    expect(reload).toHaveBeenCalled();
+    await waitFor(() => expect(reload).toHaveBeenCalled());
   });
 
   it("surfaces a failed switch without reloading", async () => {

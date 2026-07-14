@@ -3,6 +3,14 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { useCloudSync } from "@/hooks/useCloudSync";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "@/hooks/useToast";
+
+function providerDisplayName(
+  providerId: string,
+  providers: { id: string; display_name: string }[],
+) {
+  return providers.find((p) => p.id === providerId)?.display_name ?? providerId;
+}
 
 export function CloudSyncPanel() {
   const {
@@ -18,12 +26,14 @@ export function CloudSyncPanel() {
   const [passphraseDraft, setPassphraseDraft] = useState("");
   const [changingPassphrase, setChangingPassphrase] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   async function handleConnect(providerId: string) {
     setBusy(true);
     try {
       await connect(providerId);
+      toast({
+        title: `Connected to ${providerDisplayName(providerId, providers)}`,
+      });
     } catch {
       // actionError already surfaced by the hook
     } finally {
@@ -38,6 +48,7 @@ export function CloudSyncPanel() {
       await setPassphrase(passphraseDraft);
       setPassphraseDraft("");
       setChangingPassphrase(false);
+      toast({ title: "Passphrase saved" });
     } catch {
       // actionError already surfaced
     } finally {
@@ -46,11 +57,10 @@ export function CloudSyncPanel() {
   }
 
   async function handlePush() {
-    setMessage(null);
     setBusy(true);
     try {
       await push();
-      setMessage("Pushed");
+      toast({ title: "Synced to cloud", description: "Push complete" });
     } catch {
       // actionError already surfaced
     } finally {
@@ -59,7 +69,6 @@ export function CloudSyncPanel() {
   }
 
   async function handlePull() {
-    setMessage(null);
     const confirmed = await confirm(
       "Pulling will overwrite all local data with the version from the cloud. This can't be undone.",
       { title: "Pull and overwrite local data?", kind: "warning" },
@@ -69,8 +78,8 @@ export function CloudSyncPanel() {
     setBusy(true);
     try {
       await pull();
-      setMessage("Pulled — reloading...");
-      window.location.reload();
+      toast({ title: "Synced from cloud", description: "Reloading..." });
+      setTimeout(() => window.location.reload(), 600);
     } catch {
       setBusy(false);
     }
@@ -80,6 +89,7 @@ export function CloudSyncPanel() {
     setBusy(true);
     try {
       await disconnect();
+      toast({ title: "Disconnected from cloud storage" });
     } finally {
       setBusy(false);
     }
@@ -151,7 +161,6 @@ export function CloudSyncPanel() {
         </>
       )}
 
-      {message && <p className="text-sm text-muted-foreground">{message}</p>}
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
     </div>
   );

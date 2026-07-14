@@ -7,6 +7,7 @@ import { ProjectPanel } from "@/components/ProjectPanel";
 import { TodayView } from "@/components/TodayView";
 import { DailyReviewDialog } from "@/components/DailyReviewDialog";
 import { DatabaseSetupScreen } from "@/components/DatabaseSetupScreen";
+import { Toaster } from "@/components/Toaster";
 
 function App() {
   const {
@@ -49,11 +50,14 @@ function App() {
 
   if (dbStatus.status !== "ok") {
     return (
-      <DatabaseSetupScreen
-        status={dbStatus}
-        onCreateDatabaseFile={createDatabaseFile}
-        onOpenDatabaseFile={openDatabaseFile}
-      />
+      <>
+        <DatabaseSetupScreen
+          status={dbStatus}
+          onCreateDatabaseFile={createDatabaseFile}
+          onOpenDatabaseFile={openDatabaseFile}
+        />
+        <Toaster />
+      </>
     );
   }
 
@@ -130,6 +134,7 @@ function App() {
         tasks={staleTasks}
         onFinished={refreshStale}
       />
+      <Toaster />
     </div>
   );
 }

@@ -12,10 +12,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { toast } from "@/hooks/useToast";
 
 interface ManageableItemRowProps {
   title: string;
   displayLabel?: string;
+  entityLabel: string;
   onRename: (title: string) => Promise<unknown>;
   onDelete: () => Promise<void>;
   confirmTitle: string;
@@ -28,6 +30,7 @@ interface ManageableItemRowProps {
 function ManageableItemRow({
   title,
   displayLabel,
+  entityLabel,
   onRename,
   onDelete,
   confirmTitle,
@@ -76,6 +79,7 @@ function ManageableItemRow({
     if (!confirmed) return;
     try {
       await onDelete();
+      toast({ title: `${entityLabel} deleted`, description: title });
     } catch (err) {
       setError(String(err));
     }
@@ -199,6 +203,7 @@ export function ManageEpicsStoriesPanel({
               <ManageableItemRow
                 key={epic.id}
                 title={epic.title}
+                entityLabel="Epic"
                 onRename={(title) => onRenameEpic(epic.id, title)}
                 onDelete={() => onDeleteEpic(epic.id)}
                 confirmTitle="Delete epic?"
@@ -229,6 +234,7 @@ export function ManageEpicsStoriesPanel({
                 key={story.id}
                 title={story.title}
                 displayLabel={storyLabel(story)}
+                entityLabel="User story"
                 onRename={(title) => onRenameUserStory(story.id, title)}
                 onDelete={() => onDeleteUserStory(story.id)}
                 confirmTitle="Delete user story?"

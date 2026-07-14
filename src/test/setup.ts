@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import { clearToasts } from "@/hooks/useToast";
 
 // Every hook talks to the Rust backend exclusively through this function, so
 // mocking it once here (rather than per test file) is enough to isolate all
@@ -63,4 +64,5 @@ afterEach(() => {
   // explicitly, or component trees from one test leak into the next.
   cleanup();
   vi.clearAllMocks();
+  clearToasts();
 });

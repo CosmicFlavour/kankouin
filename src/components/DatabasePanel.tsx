@@ -3,6 +3,7 @@ import { open, save, confirm } from "@tauri-apps/plugin-dialog";
 import { FilePlus2Icon, FolderOpenIcon } from "lucide-react";
 import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/useToast";
 
 const FILE_FILTERS = [{ name: "Kankouin database", extensions: ["sqlite3", "db"] }];
 
@@ -27,7 +28,8 @@ export function DatabasePanel() {
     setBusy(true);
     try {
       await createDatabaseFile(filePath);
-      window.location.reload();
+      toast({ title: "Database created", description: "Reloading..." });
+      setTimeout(() => window.location.reload(), 600);
     } catch {
       setBusy(false);
     }
@@ -46,7 +48,8 @@ export function DatabasePanel() {
     setBusy(true);
     try {
       await openDatabaseFile(filePath);
-      window.location.reload();
+      toast({ title: "Database opened", description: "Reloading..." });
+      setTimeout(() => window.location.reload(), 600);
     } catch {
       setBusy(false);
     }

@@ -30,6 +30,7 @@ import {
 import { SubtaskSection } from "@/components/SubtaskSection";
 import { TagSection } from "@/components/TagSection";
 import { DatePickerPopover } from "@/components/DatePickerPopover";
+import { toast } from "@/hooks/useToast";
 
 const PRIORITIES = ["low", "medium", "high"];
 
@@ -216,6 +217,7 @@ export function TaskDetailPanel({
     if (!confirmed) return;
     try {
       await onArchive();
+      toast({ title: "Task archived", description: task.title });
     } catch (err) {
       setDangerError(String(err));
     }
@@ -227,6 +229,7 @@ export function TaskDetailPanel({
     setDangerError(null);
     try {
       await onUnarchive();
+      toast({ title: "Task restored", description: task.title });
     } catch (err) {
       setDangerError(String(err));
     }
@@ -241,6 +244,7 @@ export function TaskDetailPanel({
     if (!confirmed) return;
     try {
       await onDelete();
+      toast({ title: "Task deleted", description: task.title });
     } catch (err) {
       setDangerError(String(err));
     }

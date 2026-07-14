@@ -7,6 +7,7 @@ import type { Workspace } from "@/hooks/useWorkspaces";
 import { NameDialog } from "@/components/NameDialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/useToast";
 
 interface WorkspaceTreeItemProps {
   workspace: Workspace;
@@ -49,6 +50,7 @@ export function WorkspaceTreeItem({
     if (!confirmed) return;
     try {
       await onDeleteWorkspace(workspace.id);
+      toast({ title: "Workspace deleted", description: workspace.name });
     } catch (err) {
       setDeleteError(String(err));
     }

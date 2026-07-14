@@ -9,6 +9,7 @@ import { TaskBoard } from "@/components/TaskBoard";
 import type { TaskScope } from "@/components/ScopeFilter";
 import { ManageEpicsStoriesPanel } from "@/components/ManageEpicsStoriesPanel";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/useToast";
 
 interface ProjectPanelProps {
   workspace: Workspace;
@@ -63,6 +64,7 @@ export function ProjectPanel({
     if (!confirmed) return;
     try {
       await archiveProject(projectId);
+      toast({ title: "Project archived", description: project?.name });
       onArchived?.();
     } catch (err) {
       setArchiveError(String(err));
