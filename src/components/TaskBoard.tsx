@@ -22,6 +22,8 @@ import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { ScopeFilter, type TaskScope } from "@/components/ScopeFilter";
 import { TagFilter } from "@/components/TagFilter";
 import { PriorityFilter } from "@/components/PriorityFilter";
+import { DeadlineFilter } from "@/components/DeadlineFilter";
+import { taskDeadlineBucket } from "@/lib/deadline";
 import { NewUserStoryDialog } from "@/components/NewUserStoryDialog";
 import { NameDialog } from "@/components/NameDialog";
 
@@ -135,6 +137,9 @@ export function TaskBoard({
   const [creatingTask, setCreatingTask] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedDeadlineBuckets, setSelectedDeadlineBuckets] = useState<
+    string[]
+  >([]);
   const [showHidden, setShowHidden] = useState(false);
   const {
     archivedTasks,
@@ -153,6 +158,10 @@ export function TaskBoard({
   }, [projectId]);
 
   useEffect(() => {
+    setSelectedDeadlineBuckets([]);
+  }, [projectId]);
+
+  useEffect(() => {
     setShowHidden(false);
   }, [projectId]);
 
@@ -168,6 +177,11 @@ export function TaskBoard({
       (t) =>
         selectedPriorities.length === 0 ||
         selectedPriorities.includes(t.priority),
+    )
+    .filter(
+      (t) =>
+        selectedDeadlineBuckets.length === 0 ||
+        selectedDeadlineBuckets.includes(taskDeadlineBucket(t) ?? ""),
     );
   // Detail panel stays open for a task even if it falls outside the current
   // scope filter (e.g. it was opened before the scope changed).
@@ -298,6 +312,11 @@ export function TaskBoard({
         <PriorityFilter
           selectedPriorities={selectedPriorities}
           onChange={setSelectedPriorities}
+        />
+
+        <DeadlineFilter
+          selectedBuckets={selectedDeadlineBuckets}
+          onChange={setSelectedDeadlineBuckets}
         />
 
         <div className="flex items-center gap-1.5 text-sm">

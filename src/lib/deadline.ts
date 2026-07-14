@@ -40,6 +40,39 @@ function todayISODate(now: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+export const DEADLINE_FILTER_BUCKETS: { value: string; label: string }[] = [
+  { value: "overdue", label: "Overdue" },
+  { value: "today", label: "Today" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "this_week", label: "This Week" },
+  { value: "this_month", label: "This Month" },
+  { value: "this_quarter", label: "This Quarter" },
+  { value: "someday", label: "Someday" },
+];
+
+// Collapses a task's deadline (exact date or fuzzy bucket) into one of
+// DEADLINE_FILTER_BUCKETS' values, so the filter UI can offer a single flat
+// list regardless of which deadline_type the task actually has.
+export function taskDeadlineBucket(
+  task: {
+    deadline_type: string | null;
+    exact_date: string | null;
+    fuzzy_bucket: string | null;
+  },
+  now = new Date(),
+): string | null {
+  if (task.deadline_type === "exact" && task.exact_date) {
+    const urgency = exactDateUrgency(task.exact_date, now);
+    if (urgency === "overdue") return "overdue";
+    if (urgency === "today") return "today";
+    return "upcoming";
+  }
+  if (task.deadline_type === "fuzzy" && task.fuzzy_bucket) {
+    return task.fuzzy_bucket;
+  }
+  return null;
+}
+
 export function exactDateUrgency(
   exactDate: string,
   now = new Date(),

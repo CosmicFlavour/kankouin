@@ -5,6 +5,7 @@ import {
   exactDateUrgency,
   formatExactDate,
   isValidDateString,
+  taskDeadlineBucket,
 } from "./deadline";
 
 describe("fuzzyBucketLabel", () => {
@@ -54,6 +55,55 @@ describe("formatExactDate", () => {
         day: "numeric",
       }),
     );
+  });
+});
+
+describe("taskDeadlineBucket", () => {
+  const now = new Date(2026, 6, 11); // 2026-07-11, matches a fixed "today"
+
+  it("buckets a past exact date as overdue", () => {
+    expect(
+      taskDeadlineBucket(
+        { deadline_type: "exact", exact_date: "2026-07-10", fuzzy_bucket: null },
+        now,
+      ),
+    ).toBe("overdue");
+  });
+
+  it("buckets today's exact date as today", () => {
+    expect(
+      taskDeadlineBucket(
+        { deadline_type: "exact", exact_date: "2026-07-11", fuzzy_bucket: null },
+        now,
+      ),
+    ).toBe("today");
+  });
+
+  it("buckets a future exact date as upcoming", () => {
+    expect(
+      taskDeadlineBucket(
+        { deadline_type: "exact", exact_date: "2026-07-12", fuzzy_bucket: null },
+        now,
+      ),
+    ).toBe("upcoming");
+  });
+
+  it("passes a fuzzy bucket through unchanged", () => {
+    expect(
+      taskDeadlineBucket(
+        { deadline_type: "fuzzy", exact_date: null, fuzzy_bucket: "this_month" },
+        now,
+      ),
+    ).toBe("this_month");
+  });
+
+  it("returns null when there's no usable deadline data", () => {
+    expect(
+      taskDeadlineBucket(
+        { deadline_type: null, exact_date: null, fuzzy_bucket: null },
+        now,
+      ),
+    ).toBeNull();
   });
 });
 
