@@ -134,6 +134,22 @@ fn fetch_account_label_from(url: &str, access_token: &str) -> AppResult<Option<S
         .map(|s| s.to_string()))
 }
 
+/// Minimal percent-encoding for a URL query component — the only untrusted
+/// input here is `redirect_uri`, which is our own loopback URL
+/// (`http://127.0.0.1:<port>/callback`), so this only needs to handle that
+/// shape correctly, not be a general-purpose encoder.
+fn urlencoding_encode(value: &str) -> String {
+    value
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,20 +321,4 @@ mod tests {
 
         assert_eq!(label, None);
     }
-}
-
-/// Minimal percent-encoding for a URL query component — the only untrusted
-/// input here is `redirect_uri`, which is our own loopback URL
-/// (`http://127.0.0.1:<port>/callback`), so this only needs to handle that
-/// shape correctly, not be a general-purpose encoder.
-fn urlencoding_encode(value: &str) -> String {
-    value
-        .bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                (b as char).to_string()
-            }
-            _ => format!("%{b:02X}"),
-        })
-        .collect()
 }
