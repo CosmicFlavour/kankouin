@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::db::AppState;
 use crate::error::{AppError, AppResult};
-use crate::models::{Subtask, Tag, Task, TaskDetail, TaskLogEntry, TaskSummary};
+use crate::models::{Subtask, Tag, Task, TaskDetail, TaskSummary};
 
 const TASK_COLUMNS: &str = "id, project_id, epic_id, user_story_id, title, description, state, \
      priority, deadline_type, exact_date, fuzzy_bucket, bucket_period, state_since, \
@@ -67,16 +67,6 @@ fn row_to_subtask(row: &rusqlite::Row) -> rusqlite::Result<Subtask> {
         title: row.get("title")?,
         done: row.get::<_, i64>("done")? != 0,
         sort_order: row.get("sort_order")?,
-        created_at: row.get("created_at")?,
-    })
-}
-
-fn row_to_log(row: &rusqlite::Row) -> rusqlite::Result<TaskLogEntry> {
-    Ok(TaskLogEntry {
-        id: row.get("id")?,
-        task_id: row.get("task_id")?,
-        entry_type: row.get("entry_type")?,
-        content: row.get("content")?,
         created_at: row.get("created_at")?,
     })
 }
@@ -241,14 +231,6 @@ fn get_detail(conn: &Connection, id: String) -> AppResult<TaskDetail> {
         .query_map(params![id], row_to_tag)?
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut log_stmt = conn.prepare(
-        "SELECT id, task_id, entry_type, content, created_at
-         FROM task_logs WHERE task_id = ?1 ORDER BY created_at ASC",
-    )?;
-    let logs = log_stmt
-        .query_map(params![id], row_to_log)?
-        .collect::<Result<Vec<_>, _>>()?;
-
     let dep_sql = format!(
         "SELECT {TASK_COLUMNS_DEP_ALIASED}
          FROM task_dependencies td JOIN tasks dep ON dep.id = td.depends_on_id
@@ -263,7 +245,6 @@ fn get_detail(conn: &Connection, id: String) -> AppResult<TaskDetail> {
         task,
         subtasks,
         tags,
-        logs,
         blocked_by,
     })
 }
@@ -384,27 +365,10 @@ pub(crate) fn update_state(
         return get_task_row(conn, &id);
     }
 
-    // The state change and its log entry must land together: a crash between
-    // the two would otherwise silently break the activity-log audit trail.
-    let tx = conn.transaction()?;
-
-    tx.execute(
+    conn.execute(
         "UPDATE tasks SET state = ?2, state_since = ?3, updated_at = ?4 WHERE id = ?1",
         params![id, new_state, now, now],
     )?;
-
-    tx.execute(
-        "INSERT INTO task_logs (id, task_id, entry_type, content, created_at)
-         VALUES (?1, ?2, 'state_change', ?3, ?4)",
-        params![
-            Uuid::new_v4().to_string(),
-            id,
-            format!("State changed from {current_state} to {new_state}"),
-            now
-        ],
-    )?;
-
-    tx.commit()?;
 
     get_task_row(conn, &id)
 }
@@ -497,7 +461,7 @@ fn unarchive(conn: &Connection, id: String) -> AppResult<Task> {
 }
 
 // Unlike archive, this is a permanent, unrecoverable removal — subtasks,
-// logs, tags and dependencies all cascade away with it (see
+// tags and dependencies all cascade away with it (see
 // migrations/0001_init.sql).
 fn delete(conn: &Connection, id: String) -> AppResult<()> {
     let changed = conn.execute("DELETE FROM tasks WHERE id = ?1", params![id])?;
@@ -810,17 +774,11 @@ mod tests {
     }
 
     #[test]
-    fn delete_is_permanent_and_cascades_subtasks_and_logs() {
+    fn delete_is_permanent_and_cascades_subtasks() {
         let conn = test_connection();
         let project_id = make_project(&conn);
         let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
         insert_subtask(&conn, task.id.clone(), "Sub".into()).unwrap();
-        conn.execute(
-            "INSERT INTO task_logs (id, task_id, entry_type, content, created_at)
-             VALUES ('log-1', ?1, 'note', 'Note', datetime('now'))",
-            params![task.id],
-        )
-        .unwrap();
 
         delete(&conn, task.id.clone()).unwrap();
 
@@ -846,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    fn state_transition_stamps_state_since_and_logs() {
+    fn state_transition_stamps_state_since() {
         let mut conn = test_connection();
         let project_id = make_project(&conn);
         let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
@@ -860,14 +818,6 @@ mod tests {
 
         let done = update_state(&mut conn, task.id.clone(), "done".into()).unwrap();
         assert_ne!(done.state_since, under_review.state_since);
-
-        let detail = get_detail(&conn, task.id).unwrap();
-        let state_changes = detail
-            .logs
-            .iter()
-            .filter(|l| l.entry_type == "state_change")
-            .count();
-        assert_eq!(state_changes, 3);
     }
 
     #[test]

@@ -43,22 +43,12 @@ pub struct Subtask {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskLogEntry {
-    pub id: String,
-    pub task_id: String,
-    pub entry_type: String,
-    pub content: String,
-    pub created_at: String,
-}
-
 /// `get_task`'s return shape: everything the task detail panel needs in one
-/// call (subtasks + tags + logs + the tasks this one is blocked by).
+/// call (subtasks + tags + the tasks this one is blocked by).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskDetail {
     pub task: Task,
     pub subtasks: Vec<Subtask>,
     pub tags: Vec<Tag>,
-    pub logs: Vec<TaskLogEntry>,
     pub blocked_by: Vec<Task>,
 }
