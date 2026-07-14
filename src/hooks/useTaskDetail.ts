@@ -11,19 +11,10 @@ export interface Subtask {
   created_at: string;
 }
 
-export interface TaskLogEntry {
-  id: string;
-  task_id: string;
-  entry_type: string;
-  content: string;
-  created_at: string;
-}
-
 export interface TaskDetail {
   task: Task;
   subtasks: Subtask[];
   tags: Tag[];
-  logs: TaskLogEntry[];
   blocked_by: Task[];
 }
 
