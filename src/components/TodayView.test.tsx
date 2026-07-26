@@ -38,6 +38,27 @@ describe("TodayView", () => {
     expect(taskButton).toBeInTheDocument();
   });
 
+  it("shows each task's tags as colored dots on its row", async () => {
+    const urgentTag = { id: "tag-1", workspace_id: "ws-1", name: "urgent", color: "#ff0000" };
+    const task = makeTask({
+      id: "t1",
+      title: "Ship the thing",
+      project_id: "p1",
+      tags: [urgentTag],
+    });
+    mockCommands({
+      list_tasks_today: () => [task],
+      list_workspaces: () => [{ id: "ws-1", name: "Work", color: null, icon: null }],
+      list_projects: () => [{ id: "p1", workspace_id: "ws-1", name: "Launch" }],
+    });
+    render(<TodayView />);
+
+    await screen.findByText("Ship the thing");
+    const dot = document.querySelector('[title="urgent"]');
+    expect(dot).toBeInTheDocument();
+    expect(dot).toHaveStyle({ backgroundColor: "#ff0000" });
+  });
+
   it("does not show a tag filter when there are no tasks", async () => {
     mockCommands({
       list_tasks_today: () => [],

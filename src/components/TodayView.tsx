@@ -89,7 +89,21 @@ export function TodayView() {
                       </span>
                     )}
                   </span>
-                  <DeadlineBadge task={task} />
+                  <span className="flex shrink-0 items-center gap-2">
+                    {task.tags.length > 0 && (
+                      <span className="flex items-center gap-1">
+                        {task.tags.map((tag) => (
+                          <span
+                            key={tag.id}
+                            title={tag.name}
+                            className="size-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: tag.color }}
+                          />
+                        ))}
+                      </span>
+                    )}
+                    <DeadlineBadge task={task} />
+                  </span>
                 </button>
               );
             })}
