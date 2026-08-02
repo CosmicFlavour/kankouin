@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -24,6 +26,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
