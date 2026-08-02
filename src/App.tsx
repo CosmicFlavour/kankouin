@@ -10,6 +10,11 @@ import { DatabaseSetupScreen } from "@/components/DatabaseSetupScreen";
 import { Toaster } from "@/components/Toaster";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
+// Daily Review should auto-open at most once per calendar day. Stored in
+// localStorage (not component state) so it survives closing and reopening
+// the app, not just re-renders within a single session.
+const DAILY_REVIEW_LAST_SHOWN_KEY = "kankouin.dailyReview.lastAutoOpenedDate";
+
 function App() {
   const {
     status: dbStatus,
@@ -29,7 +34,6 @@ function App() {
   );
   const [showToday, setShowToday] = useState(false);
   const [dailyReviewOpen, setDailyReviewOpen] = useState(false);
-  const [autoOpenedReview, setAutoOpenedReview] = useState(false);
   // ProjectPanel and the sidebar tree each hold their own useProjects
   // instance with no shared cache; bumping this forces both to re-fetch so
   // archiving from one is reflected in the other (see useProjects.ts).
@@ -38,11 +42,12 @@ function App() {
   const selectedWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId);
 
   useEffect(() => {
-    if (!autoOpenedReview && !staleLoading && staleTasks.length > 0) {
-      setDailyReviewOpen(true);
-      setAutoOpenedReview(true);
-    }
-  }, [autoOpenedReview, staleLoading, staleTasks]);
+    if (staleLoading || staleTasks.length === 0) return;
+    const today = new Date().toDateString();
+    if (localStorage.getItem(DAILY_REVIEW_LAST_SHOWN_KEY) === today) return;
+    localStorage.setItem(DAILY_REVIEW_LAST_SHOWN_KEY, today);
+    setDailyReviewOpen(true);
+  }, [staleLoading, staleTasks]);
 
   if (dbStatusLoading || !dbStatus) {
     return null;
