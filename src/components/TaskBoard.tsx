@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { TaskColumn } from "@/components/TaskColumn";
 import { TaskDetailPanel } from "@/components/TaskDetailPanel";
 import { ScopeFilter, type TaskScope } from "@/components/ScopeFilter";
-import { TagFilter } from "@/components/TagFilter";
+import { TagFilter, type TagFilterValue } from "@/components/TagFilter";
 import { PriorityFilter } from "@/components/PriorityFilter";
 import { DeadlineFilter } from "@/components/DeadlineFilter";
 import { taskDeadlineBucket } from "@/lib/deadline";
@@ -127,7 +127,10 @@ export function TaskBoard({
   const [moveError, setMoveError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<TagFilterValue>({
+    include: [],
+    exclude: [],
+  });
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [selectedDeadlineBuckets, setSelectedDeadlineBuckets] = useState<
     string[]
@@ -142,7 +145,7 @@ export function TaskBoard({
   } = useArchivedTasks(showHidden ? projectId : null);
 
   useEffect(() => {
-    setSelectedTagIds([]);
+    setTagFilter({ include: [], exclude: [] });
   }, [projectId]);
 
   useEffect(() => {
@@ -162,9 +165,10 @@ export function TaskBoard({
     .filter((t) => taskMatchesScope(t, scope, userStories))
     .filter(
       (t) =>
-        selectedTagIds.length === 0 ||
-        t.tags.some((tag) => selectedTagIds.includes(tag.id)),
+        tagFilter.include.length === 0 ||
+        t.tags.some((tag) => tagFilter.include.includes(tag.id)),
     )
+    .filter((t) => !t.tags.some((tag) => tagFilter.exclude.includes(tag.id)))
     .filter(
       (t) =>
         selectedPriorities.length === 0 ||
@@ -290,8 +294,8 @@ export function TaskBoard({
           tags={tags}
           loading={tagsLoading}
           error={tagsError}
-          selectedTagIds={selectedTagIds}
-          onChange={setSelectedTagIds}
+          value={tagFilter}
+          onChange={setTagFilter}
         />
 
         <PriorityFilter

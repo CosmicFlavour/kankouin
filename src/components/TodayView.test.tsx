@@ -109,9 +109,53 @@ describe("TodayView", () => {
     expect(screen.getByText("Write the docs")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /All tags/ }));
-    await user.click(await screen.findByRole("checkbox", { name: /urgent/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Include urgent" }),
+    );
 
     expect(screen.getByText("Ship the thing")).toBeInTheDocument();
     expect(screen.queryByText("Write the docs")).not.toBeInTheDocument();
+  });
+
+  it("excludes tasks carrying the excluded tag, across workspaces", async () => {
+    const urgentTag = makeTag({ id: "tag-1", name: "urgent", color: "#f00" });
+    const laterTag = makeTag({ id: "tag-2", name: "later", color: "#00f" });
+    const taskA = makeTask({
+      id: "t1",
+      title: "Ship the thing",
+      project_id: "p1",
+      tags: [urgentTag],
+    });
+    const taskB = makeTask({
+      id: "t2",
+      title: "Write the docs",
+      project_id: "p2",
+      tags: [laterTag],
+    });
+    mockCommands({
+      list_tasks_today: () => [taskA, taskB],
+      list_workspaces: () => [
+        { id: "ws-1", name: "Work", color: null, icon: null },
+        { id: "ws-2", name: "Side project", color: null, icon: null },
+      ],
+      list_projects: (args) =>
+        args?.workspaceId === "ws-1"
+          ? [{ id: "p1", workspace_id: "ws-1", name: "Launch" }]
+          : [{ id: "p2", workspace_id: "ws-2", name: "Blog" }],
+      list_tags: () => [urgentTag, laterTag],
+    });
+    const user = userEvent.setup();
+    render(<TodayView />);
+
+    await screen.findByText("Ship the thing");
+    expect(screen.getByText("Write the docs")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /All tags/ }));
+    await user.click(
+      await screen.findByRole("button", { name: "Exclude urgent" }),
+    );
+
+    expect(screen.queryByText("Ship the thing")).not.toBeInTheDocument();
+    expect(screen.getByText("Write the docs")).toBeInTheDocument();
   });
 });

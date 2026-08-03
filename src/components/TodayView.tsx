@@ -4,7 +4,7 @@ import { useProjectDirectory } from "@/hooks/useProjectDirectory";
 import { useTags } from "@/hooks/useTags";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
 import { TaskDetailDialog } from "@/components/TaskDetailDialog";
-import { TagFilter } from "@/components/TagFilter";
+import { TagFilter, type TagFilterValue } from "@/components/TagFilter";
 
 export function TodayView() {
   const { tasks, loading, error, refresh } = useTasksToday();
@@ -16,13 +16,18 @@ export function TodayView() {
     error: tagsError,
   } = useTags();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<TagFilterValue>({
+    include: [],
+    exclude: [],
+  });
 
-  const visibleTasks = tasks.filter(
-    (t) =>
-      selectedTagIds.length === 0 ||
-      t.tags.some((tag) => selectedTagIds.includes(tag.id)),
-  );
+  const visibleTasks = tasks
+    .filter(
+      (t) =>
+        tagFilter.include.length === 0 ||
+        t.tags.some((tag) => tagFilter.include.includes(tag.id)),
+    )
+    .filter((t) => !t.tags.some((tag) => tagFilter.exclude.includes(tag.id)));
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
@@ -35,8 +40,8 @@ export function TodayView() {
             tags={tags}
             loading={tagsLoading}
             error={tagsError}
-            selectedTagIds={selectedTagIds}
-            onChange={setSelectedTagIds}
+            value={tagFilter}
+            onChange={setTagFilter}
           />
         )}
       </div>
