@@ -7,7 +7,6 @@ import { taskEditingHandlers } from "@/lib/taskEditingHandlers";
 
 interface TaskDetailDialogProps {
   projectId: string | null;
-  workspaceId: string | null;
   taskId: string | null;
   onOpenChange: (open: boolean) => void;
 }
@@ -19,7 +18,6 @@ interface TaskDetailDialogProps {
 // task doesn't require navigating into that project's TaskBoard first.
 export function TaskDetailDialog({
   projectId,
-  workspaceId,
   taskId,
   onOpenChange,
 }: TaskDetailDialogProps) {
@@ -33,11 +31,10 @@ export function TaskDetailDialog({
   return (
     <Dialog open={!!taskId} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
-        {task && workspaceId && (
+        {task && (
           <TaskDetailPanel
             key={task.id}
             task={task}
-            workspaceId={workspaceId}
             epics={epics}
             userStories={userStories}
             {...taskEditingHandlers(tasksApi, task.id)}

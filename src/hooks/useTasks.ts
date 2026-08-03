@@ -3,7 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface Tag {
   id: string;
-  workspace_id: string;
   name: string;
   color: string;
 }

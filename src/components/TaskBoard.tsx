@@ -67,7 +67,6 @@ function CreateTaskForm({
 
 interface TaskBoardProps {
   projectId: string;
-  workspaceId: string;
   scope: TaskScope;
   onScopeChange: (scope: TaskScope) => void;
   epics: Epic[];
@@ -100,7 +99,6 @@ function taskMatchesScope(
 
 export function TaskBoard({
   projectId,
-  workspaceId,
   scope,
   onScopeChange,
   epics,
@@ -125,7 +123,7 @@ export function TaskBoard({
     archiveTask,
     deleteTask,
   } = tasksApi;
-  const { tags, loading: tagsLoading, error: tagsError } = useTags(workspaceId);
+  const { tags, loading: tagsLoading, error: tagsError } = useTags();
   const [moveError, setMoveError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [creatingTask, setCreatingTask] = useState(false);
@@ -380,7 +378,6 @@ export function TaskBoard({
             <TaskDetailPanel
               key={selectedTask.id}
               task={selectedTask}
-              workspaceId={workspaceId}
               epics={epics}
               userStories={userStories}
               {...taskEditingHandlers(tasksApi, selectedTask.id)}

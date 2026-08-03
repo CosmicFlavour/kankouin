@@ -50,7 +50,7 @@ export function TagFilter({
           <p className="text-muted-foreground">Couldn't load tags: {error}</p>
         )}
         {!loading && !error && tags.length === 0 && (
-          <p className="text-muted-foreground">No tags in this workspace yet</p>
+          <p className="text-muted-foreground">No tags yet</p>
         )}
         {tags.map((tag) => (
           <label key={tag.id} className="flex items-center gap-2">

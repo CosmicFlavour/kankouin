@@ -5,6 +5,7 @@ import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { ProjectPanel } from "@/components/ProjectPanel";
 import { TodayView } from "@/components/TodayView";
+import { TagsView } from "@/components/TagsView";
 import { DailyReviewDialog } from "@/components/DailyReviewDialog";
 import { DatabaseSetupScreen } from "@/components/DatabaseSetupScreen";
 import { Toaster } from "@/components/Toaster";
@@ -32,7 +33,9 @@ function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
   );
-  const [showToday, setShowToday] = useState(false);
+  const [activeView, setActiveView] = useState<"workspace" | "today" | "tags">(
+    "workspace",
+  );
   const [dailyReviewOpen, setDailyReviewOpen] = useState(false);
   // ProjectPanel and the sidebar tree each hold their own useProjects
   // instance with no shared cache; bumping this forces both to re-fetch so
@@ -77,12 +80,12 @@ function App() {
         selectedWorkspaceId={selectedWorkspaceId}
         selectedProjectId={selectedProjectId}
         onSelectWorkspace={(workspaceId) => {
-          setShowToday(false);
+          setActiveView("workspace");
           setSelectedWorkspaceId(workspaceId);
           setSelectedProjectId(null);
         }}
         onSelectProject={(workspaceId, projectId) => {
-          setShowToday(false);
+          setActiveView("workspace");
           setSelectedWorkspaceId(workspaceId);
           setSelectedProjectId(projectId);
         }}
@@ -93,25 +96,27 @@ function App() {
             setSelectedProjectId(null);
           }
         }}
-        showToday={showToday}
-        onSelectToday={() => setShowToday(true)}
+        activeView={activeView}
+        onSelectToday={() => setActiveView("today")}
+        onSelectTags={() => setActiveView("tags")}
         staleCount={staleTasks.length}
         onOpenDailyReview={() => setDailyReviewOpen(true)}
         projectsVersion={projectsVersion}
       />
       <main className="flex flex-1 flex-col p-6">
-        {showToday && <TodayView />}
-        {!showToday && !selectedWorkspace && (
+        {activeView === "today" && <TodayView />}
+        {activeView === "tags" && <TagsView />}
+        {activeView === "workspace" && !selectedWorkspace && (
           <p className="m-auto text-muted-foreground">
             Select a workspace to get started
           </p>
         )}
-        {!showToday && selectedWorkspace && !selectedProjectId && (
+        {activeView === "workspace" && selectedWorkspace && !selectedProjectId && (
           <p className="m-auto text-muted-foreground">
             Select a project to get started
           </p>
         )}
-        {!showToday && selectedWorkspace && selectedProjectId && (
+        {activeView === "workspace" && selectedWorkspace && selectedProjectId && (
           <ProjectPanel
             workspace={selectedWorkspace}
             projectId={selectedProjectId}

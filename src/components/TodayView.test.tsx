@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TodayView } from "./TodayView";
 import { mockCommands } from "@/test/tauriMock";
-import { makeTask } from "@/test/factories";
+import { makeTask, makeTag } from "@/test/factories";
 
 function baseMocks() {
   const task = makeTask({ id: "t1", title: "Ship the thing", project_id: "p1" });
@@ -39,7 +39,7 @@ describe("TodayView", () => {
   });
 
   it("shows each task's tags as colored dots on its row", async () => {
-    const urgentTag = { id: "tag-1", workspace_id: "ws-1", name: "urgent", color: "#ff0000" };
+    const urgentTag = makeTag({ id: "tag-1", name: "urgent", color: "#ff0000" });
     const task = makeTask({
       id: "t1",
       title: "Ship the thing",
@@ -50,6 +50,7 @@ describe("TodayView", () => {
       list_tasks_today: () => [task],
       list_workspaces: () => [{ id: "ws-1", name: "Work", color: null, icon: null }],
       list_projects: () => [{ id: "p1", workspace_id: "ws-1", name: "Launch" }],
+      list_tags: () => [urgentTag],
     });
     render(<TodayView />);
 
@@ -64,6 +65,7 @@ describe("TodayView", () => {
       list_tasks_today: () => [],
       list_workspaces: () => [],
       list_projects: () => [],
+      list_tags: () => [],
     });
     render(<TodayView />);
 
@@ -74,8 +76,8 @@ describe("TodayView", () => {
   });
 
   it("filters the list to tasks matching the selected tag, across workspaces", async () => {
-    const urgentTag = { id: "tag-1", workspace_id: "ws-1", name: "urgent", color: "#f00" };
-    const laterTag = { id: "tag-2", workspace_id: "ws-2", name: "later", color: "#00f" };
+    const urgentTag = makeTag({ id: "tag-1", name: "urgent", color: "#f00" });
+    const laterTag = makeTag({ id: "tag-2", name: "later", color: "#00f" });
     const taskA = makeTask({
       id: "t1",
       title: "Ship the thing",
@@ -98,6 +100,7 @@ describe("TodayView", () => {
         args?.workspaceId === "ws-1"
           ? [{ id: "p1", workspace_id: "ws-1", name: "Launch" }]
           : [{ id: "p2", workspace_id: "ws-2", name: "Blog" }],
+      list_tags: () => [urgentTag, laterTag],
     });
     const user = userEvent.setup();
     render(<TodayView />);

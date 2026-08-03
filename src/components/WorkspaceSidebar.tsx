@@ -18,8 +18,9 @@ interface WorkspaceSidebarProps {
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectProject: (workspaceId: string, projectId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => Promise<void>;
-  showToday: boolean;
+  activeView: "workspace" | "today" | "tags";
   onSelectToday: () => void;
+  onSelectTags: () => void;
   staleCount: number;
   onOpenDailyReview: () => void;
   projectsVersion: number;
@@ -35,8 +36,9 @@ export function WorkspaceSidebar({
   onSelectWorkspace,
   onSelectProject,
   onDeleteWorkspace,
-  showToday,
+  activeView,
   onSelectToday,
+  onSelectTags,
   staleCount,
   onOpenDailyReview,
   projectsVersion,
@@ -56,10 +58,20 @@ export function WorkspaceSidebar({
           onClick={onSelectToday}
           className={cn(
             "rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted",
-            showToday && "bg-accent text-foreground",
+            activeView === "today" && "bg-accent text-foreground",
           )}
         >
           Today / This Week
+        </button>
+        <button
+          type="button"
+          onClick={onSelectTags}
+          className={cn(
+            "rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted",
+            activeView === "tags" && "bg-accent text-foreground",
+          )}
+        >
+          Tags
         </button>
         <button
           type="button"
@@ -113,8 +125,12 @@ export function WorkspaceSidebar({
           <WorkspaceTreeItem
             key={workspace.id}
             workspace={workspace}
-            isSelected={!showToday && workspace.id === selectedWorkspaceId}
-            selectedProjectId={showToday ? null : selectedProjectId}
+            isSelected={
+              activeView === "workspace" && workspace.id === selectedWorkspaceId
+            }
+            selectedProjectId={
+              activeView === "workspace" ? selectedProjectId : null
+            }
             onSelectWorkspace={() => onSelectWorkspace(workspace.id)}
             onSelectProject={(projectId) =>
               onSelectProject(workspace.id, projectId)

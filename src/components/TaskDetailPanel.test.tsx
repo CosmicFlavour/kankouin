@@ -51,7 +51,6 @@ function renderPanel(
       <Dialog open onOpenChange={onOpenChange}>
         <TaskDetailPanel
           task={task}
-          workspaceId="ws-1"
           epics={epics}
           userStories={userStories}
           {...handlers}

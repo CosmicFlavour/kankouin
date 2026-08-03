@@ -1,6 +1,6 @@
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
-import type { TaskSummary } from "@/hooks/useTasks";
+import type { Tag, TaskSummary } from "@/hooks/useTasks";
 
 export function makeTask(overrides: Partial<TaskSummary> = {}): TaskSummary {
   return {
@@ -34,6 +34,15 @@ export function makeEpic(overrides: Partial<Epic> = {}): Epic {
     description: null,
     created_at: "2026-07-11T00:00:00Z",
     updated_at: "2026-07-11T00:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeTag(overrides: Partial<Tag> = {}): Tag {
+  return {
+    id: "tag-1",
+    name: "Tag",
+    color: "#888888",
     ...overrides,
   };
 }

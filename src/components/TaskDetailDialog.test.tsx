@@ -29,7 +29,6 @@ describe("TaskDetailDialog", () => {
     render(
       <TaskDetailDialog
         projectId={null}
-        workspaceId={null}
         taskId={null}
         onOpenChange={vi.fn()}
       />,
@@ -43,7 +42,6 @@ describe("TaskDetailDialog", () => {
     render(
       <TaskDetailDialog
         projectId="project-1"
-        workspaceId="ws-1"
         taskId="t1"
         onOpenChange={vi.fn()}
       />,
@@ -60,7 +58,6 @@ describe("TaskDetailDialog", () => {
       <>
         <TaskDetailDialog
           projectId="project-1"
-          workspaceId="ws-1"
           taskId="t1"
           onOpenChange={onOpenChange}
         />
@@ -83,7 +80,6 @@ describe("TaskDetailDialog", () => {
       <>
         <TaskDetailDialog
           projectId="project-1"
-          workspaceId="ws-1"
           taskId="t1"
           onOpenChange={onOpenChange}
         />

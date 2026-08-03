@@ -2,9 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TagFilter } from "./TagFilter";
+import { makeTag } from "@/test/factories";
 
-const urgentTag = { id: "tag-1", workspace_id: "ws-1", name: "urgent", color: "#ff0000" };
-const laterTag = { id: "tag-2", workspace_id: "ws-1", name: "later", color: "#0000ff" };
+const urgentTag = makeTag({ id: "tag-1", name: "urgent", color: "#ff0000" });
+const laterTag = makeTag({ id: "tag-2", name: "later", color: "#0000ff" });
 
 describe("TagFilter", () => {
   it("labels the trigger 'All tags' when nothing is selected", () => {
@@ -140,7 +141,7 @@ describe("TagFilter", () => {
     expect(screen.queryByRole("button", { name: "Clear" })).not.toBeInTheDocument();
   });
 
-  it("shows a placeholder when the workspace has no tags", async () => {
+  it("shows a placeholder when there are no tags", async () => {
     const user = userEvent.setup();
     render(
       <TagFilter
@@ -154,9 +155,7 @@ describe("TagFilter", () => {
 
     await user.click(screen.getByRole("button", { name: /All tags/ }));
 
-    expect(
-      await screen.findByText("No tags in this workspace yet"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No tags yet")).toBeInTheDocument();
   });
 
   it("surfaces a load error inside the popover", async () => {

@@ -113,7 +113,6 @@ export function ProjectPanel({
 
       <TaskBoard
         projectId={projectId}
-        workspaceId={workspace.id}
         scope={scope}
         onScopeChange={setScope}
         epics={epics}

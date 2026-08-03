@@ -2,22 +2,17 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Tag } from "@/hooks/useTasks";
 
-export function useTags(workspaceId: string | null) {
+export function useTags() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!workspaceId) {
-      setTags([]);
-      return;
-    }
-
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    invoke<Tag[]>("list_tags", { workspaceId })
+    invoke<Tag[]>("list_tags")
       .then((result) => {
         if (!cancelled) setTags(result);
       })
@@ -31,17 +26,24 @@ export function useTags(workspaceId: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, []);
 
   async function createTag(name: string, color: string) {
-    if (!workspaceId) return;
-    const created = await invoke<Tag>("create_tag", {
-      workspaceId,
-      name,
-      color,
-    });
-    setTags((prev) => [...prev, created]);
+    const created = await invoke<Tag>("create_tag", { name, color });
+    setTags((prev) =>
+      [...prev, created].sort((a, b) => a.name.localeCompare(b.name)),
+    );
     return created;
+  }
+
+  async function updateTag(tagId: string, name: string, color: string) {
+    const updated = await invoke<Tag>("update_tag", { id: tagId, name, color });
+    setTags((prev) =>
+      prev
+        .map((t) => (t.id === tagId ? updated : t))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    return updated;
   }
 
   // Hard delete: removes the tag and every task's association with it.
@@ -53,5 +55,5 @@ export function useTags(workspaceId: string | null) {
     setTags((prev) => prev.filter((t) => t.id !== tagId));
   }
 
-  return { tags, loading, error, createTag, deleteTag };
+  return { tags, loading, error, createTag, updateTag, deleteTag };
 }

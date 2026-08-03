@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTasksToday } from "@/hooks/useTasksToday";
 import { useProjectDirectory } from "@/hooks/useProjectDirectory";
-import type { Tag } from "@/hooks/useTasks";
+import { useTags } from "@/hooks/useTags";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
 import { TaskDetailDialog } from "@/components/TaskDetailDialog";
 import { TagFilter } from "@/components/TagFilter";
@@ -10,19 +10,13 @@ export function TodayView() {
   const { tasks, loading, error, refresh } = useTasksToday();
   const { directory, loading: directoryLoading, error: directoryError } =
     useProjectDirectory();
+  const {
+    tags,
+    loading: tagsLoading,
+    error: tagsError,
+  } = useTags();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-
-  // Tasks here span every workspace, so there's no single workspaceId to
-  // fetch tags for (unlike TaskBoard's TagFilter) — the filter options are
-  // just whatever tags are actually present on tasks in this list.
-  const availableTags = useMemo(() => {
-    const byId = new Map<string, Tag>();
-    for (const task of tasks) {
-      for (const tag of task.tags) byId.set(tag.id, tag);
-    }
-    return Array.from(byId.values());
-  }, [tasks]);
 
   const visibleTasks = tasks.filter(
     (t) =>
@@ -31,9 +25,6 @@ export function TodayView() {
   );
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
-  const selectedLocation = selectedTask
-    ? directory.get(selectedTask.project_id)
-    : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -41,9 +32,9 @@ export function TodayView() {
         <h2 className="text-lg font-semibold">Today / This Week</h2>
         {tasks.length > 0 && (
           <TagFilter
-            tags={availableTags}
-            loading={false}
-            error={null}
+            tags={tags}
+            loading={tagsLoading}
+            error={tagsError}
             selectedTagIds={selectedTagIds}
             onChange={setSelectedTagIds}
           />
@@ -113,7 +104,6 @@ export function TodayView() {
 
       <TaskDetailDialog
         projectId={selectedTask?.project_id ?? null}
-        workspaceId={selectedLocation?.workspaceId ?? null}
         taskId={selectedTaskId}
         onOpenChange={(open) => {
           if (!open) {

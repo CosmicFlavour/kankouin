@@ -40,7 +40,6 @@ const NO_PARENT = "__no_parent__";
 
 interface TaskDetailPanelProps {
   task: TaskSummary;
-  workspaceId: string;
   epics: Epic[];
   userStories: UserStory[];
   onChangeTitle: (title: string) => Promise<void>;
@@ -63,7 +62,6 @@ interface TaskDetailPanelProps {
 
 export function TaskDetailPanel({
   task,
-  workspaceId,
   epics,
   userStories,
   onChangeTitle,
@@ -431,11 +429,7 @@ export function TaskDetailPanel({
             )}
           </dd>
         </div>
-        <TagSection
-          workspaceId={workspaceId}
-          taskTags={task.tags}
-          onChangeTags={onChangeTags}
-        />
+        <TagSection taskTags={task.tags} onChangeTags={onChangeTags} />
         {task.blocked && (
           <div>
             <dd className="text-destructive">Blocked by another task</dd>
