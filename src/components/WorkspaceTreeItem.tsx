@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { ChevronRightIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronRightIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { confirm } from "@/hooks/useConfirm";
 import { useProjects } from "@/hooks/useProjects";
 import { useArchivedProjects } from "@/hooks/useArchivedProjects";
 import type { Workspace } from "@/hooks/useWorkspaces";
 import { NameDialog } from "@/components/NameDialog";
+import { ManageableItemRow } from "@/components/ManageableItemRow";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 
@@ -16,6 +18,8 @@ interface WorkspaceTreeItemProps {
   onSelectWorkspace: () => void;
   onSelectProject: (projectId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => Promise<void>;
+  onRenameWorkspace: (workspaceId: string, name: string) => Promise<unknown>;
+  onProjectsChanged?: () => void;
   projectsVersion: number;
 }
 
@@ -26,20 +30,27 @@ export function WorkspaceTreeItem({
   onSelectWorkspace,
   onSelectProject,
   onDeleteWorkspace,
+  onRenameWorkspace,
+  onProjectsChanged,
   projectsVersion,
 }: WorkspaceTreeItemProps) {
   const [expanded, setExpanded] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const { projects, loading, error, createProject } = useProjects(
-    workspace.id,
-    projectsVersion,
-  );
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState(workspace.name);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const { projects, loading, error, createProject, updateProject } =
+    useProjects(workspace.id, projectsVersion);
   const {
     archivedProjects,
     loading: archivedLoading,
     error: archivedError,
   } = useArchivedProjects(archivedOpen ? workspace.id : null);
+
+  useEffect(() => {
+    setNameDraft(workspace.name);
+  }, [workspace.name]);
 
   async function handleDelete() {
     setDeleteError(null);
@@ -56,6 +67,37 @@ export function WorkspaceTreeItem({
     }
   }
 
+  async function commitRename() {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed === workspace.name) {
+      setNameDraft(workspace.name);
+      setRenaming(false);
+      return;
+    }
+    try {
+      await onRenameWorkspace(workspace.id, trimmed);
+      setRenameError(null);
+      setRenaming(false);
+    } catch (err) {
+      setRenameError(String(err));
+    }
+  }
+
+  function handleNameKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.currentTarget.blur();
+    } else if (e.key === "Escape") {
+      setNameDraft(workspace.name);
+      setRenaming(false);
+    }
+  }
+
+  async function handleRenameProject(projectId: string, name: string) {
+    await updateProject(projectId, name);
+    onProjectsChanged?.();
+  }
+
   return (
     <div className="flex flex-col">
       <div
@@ -64,53 +106,81 @@ export function WorkspaceTreeItem({
           isSelected && !selectedProjectId && "bg-accent",
         )}
       >
-        <button
-          type="button"
-          onClick={() => {
-            setExpanded((prev) => !prev);
-            onSelectWorkspace();
-          }}
-          className={cn(
-            "flex flex-1 items-center gap-1 px-1 py-1.5 text-left text-sm text-muted-foreground",
-            isSelected && !selectedProjectId && "text-foreground",
-          )}
-        >
-          <ChevronRightIcon
-            className={cn(
-              "size-3.5 shrink-0 transition-transform",
-              expanded && "rotate-90",
-            )}
+        {renaming ? (
+          <Input
+            autoFocus
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={handleNameKeyDown}
+            className="h-7 flex-1"
           />
-          {workspace.name}
-        </button>
-        <NameDialog
-          trigger={
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setExpanded((prev) => !prev);
+              onSelectWorkspace();
+            }}
+            className={cn(
+              "flex flex-1 items-center gap-1 px-1 py-1.5 text-left text-sm text-muted-foreground",
+              isSelected && !selectedProjectId && "text-foreground",
+            )}
+          >
+            <ChevronRightIcon
+              className={cn(
+                "size-3.5 shrink-0 transition-transform",
+                expanded && "rotate-90",
+              )}
+            />
+            {workspace.name}
+          </button>
+        )}
+        {!renaming && (
+          <>
             <Button
               type="button"
               variant="ghost"
               size="icon-xs"
               className="opacity-0 group-hover:opacity-100"
+              onClick={() => setRenaming(true)}
             >
-              <PlusIcon />
-              <span className="sr-only">New project</span>
+              <PencilIcon />
+              <span className="sr-only">Rename workspace</span>
             </Button>
-          }
-          title={`New project in ${workspace.name}`}
-          placeholder="Project name"
-          submitLabel="Create project"
-          onSubmit={createProject}
-        />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="opacity-0 group-hover:opacity-100"
-          onClick={handleDelete}
-        >
-          <Trash2Icon />
-          <span className="sr-only">Delete workspace</span>
-        </Button>
+            <NameDialog
+              trigger={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  className="opacity-0 group-hover:opacity-100"
+                >
+                  <PlusIcon />
+                  <span className="sr-only">New project</span>
+                </Button>
+              }
+              title={`New project in ${workspace.name}`}
+              placeholder="Project name"
+              submitLabel="Create project"
+              onSubmit={createProject}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="opacity-0 group-hover:opacity-100"
+              onClick={handleDelete}
+            >
+              <Trash2Icon />
+              <span className="sr-only">Delete workspace</span>
+            </Button>
+          </>
+        )}
       </div>
+      {renameError && (
+        <p className="px-2 text-xs text-destructive">{renameError}</p>
+      )}
       {deleteError && (
         <p className="px-2 text-xs text-destructive">{deleteError}</p>
       )}
@@ -133,17 +203,14 @@ export function WorkspaceTreeItem({
             </p>
           )}
           {projects.map((project) => (
-            <button
+            <ManageableItemRow
               key={project.id}
-              type="button"
-              onClick={() => onSelectProject(project.id)}
-              className={cn(
-                "rounded-md px-2 py-1 text-left text-sm text-muted-foreground hover:bg-muted",
-                project.id === selectedProjectId && "bg-accent text-foreground",
-              )}
-            >
-              {project.name}
-            </button>
+              title={project.name}
+              entityLabel="Project"
+              onRename={(name) => handleRenameProject(project.id, name)}
+              onSelect={() => onSelectProject(project.id)}
+              selected={project.id === selectedProjectId}
+            />
           ))}
 
           <button

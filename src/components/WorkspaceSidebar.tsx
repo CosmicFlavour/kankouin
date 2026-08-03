@@ -18,6 +18,8 @@ interface WorkspaceSidebarProps {
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectProject: (workspaceId: string, projectId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => Promise<void>;
+  onRenameWorkspace: (workspaceId: string, name: string) => Promise<unknown>;
+  onProjectsChanged?: () => void;
   activeView: "workspace" | "today" | "tags";
   onSelectToday: () => void;
   onSelectTags: () => void;
@@ -36,6 +38,8 @@ export function WorkspaceSidebar({
   onSelectWorkspace,
   onSelectProject,
   onDeleteWorkspace,
+  onRenameWorkspace,
+  onProjectsChanged,
   activeView,
   onSelectToday,
   onSelectTags,
@@ -136,6 +140,8 @@ export function WorkspaceSidebar({
               onSelectProject(workspace.id, projectId)
             }
             onDeleteWorkspace={onDeleteWorkspace}
+            onRenameWorkspace={onRenameWorkspace}
+            onProjectsChanged={onProjectsChanged}
             projectsVersion={projectsVersion}
           />
         ))}

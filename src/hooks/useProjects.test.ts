@@ -69,6 +69,28 @@ describe("useProjects", () => {
     });
   });
 
+  it("updateProject replaces the project with the renamed version", async () => {
+    const renamed = { ...project, name: "Website relaunch v2" };
+    mockCommands({
+      list_projects: () => [project],
+      update_project: () => renamed,
+    });
+
+    const { result } = renderHook(() => useProjects("ws-1"));
+    await waitFor(() => expect(result.current.projects).toEqual([project]));
+
+    await act(async () => {
+      await result.current.updateProject("p1", "Website relaunch v2");
+    });
+
+    expect(result.current.projects).toEqual([renamed]);
+    expect(mockInvoke).toHaveBeenCalledWith("update_project", {
+      id: "p1",
+      name: "Website relaunch v2",
+      description: null,
+    });
+  });
+
   it("archiveProject removes the project from local state", async () => {
     mockCommands({
       list_projects: () => [project],

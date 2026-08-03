@@ -1,10 +1,6 @@
-import { useEffect, useState } from "react";
-import { PencilIcon, Trash2Icon } from "lucide-react";
-import { confirm } from "@/hooks/useConfirm";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ManageableItemRow } from "@/components/ManageableItemRow";
 import {
   Dialog,
   DialogContent,
@@ -12,125 +8,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { toast } from "@/hooks/useToast";
-
-interface ManageableItemRowProps {
-  title: string;
-  displayLabel?: string;
-  entityLabel: string;
-  onRename: (title: string) => Promise<unknown>;
-  onDelete: () => Promise<void>;
-  confirmTitle: string;
-  confirmMessage: string;
-}
-
-// Shared row for both epics and user stories: plain text with hover-revealed
-// rename/delete icons (same affordance as WorkspaceTreeItem's project rows),
-// swapping to an inline Input on rename rather than opening another dialog.
-function ManageableItemRow({
-  title,
-  displayLabel,
-  entityLabel,
-  onRename,
-  onDelete,
-  confirmTitle,
-  confirmMessage,
-}: ManageableItemRowProps) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(title);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraft(title);
-  }, [title]);
-
-  async function commit() {
-    const trimmed = draft.trim();
-    if (!trimmed || trimmed === title) {
-      setDraft(title);
-      setEditing(false);
-      return;
-    }
-    try {
-      await onRename(trimmed);
-      setError(null);
-      setEditing(false);
-    } catch (err) {
-      setError(String(err));
-    }
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      e.currentTarget.blur();
-    } else if (e.key === "Escape") {
-      setDraft(title);
-      setEditing(false);
-    }
-  }
-
-  async function handleDelete() {
-    setError(null);
-    const confirmed = await confirm(confirmMessage, {
-      title: confirmTitle,
-      kind: "warning",
-    });
-    if (!confirmed) return;
-    try {
-      await onDelete();
-      toast({ title: `${entityLabel} deleted`, description: title });
-    } catch (err) {
-      setError(String(err));
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="group flex items-center gap-1 rounded-md px-1 hover:bg-muted">
-        {editing ? (
-          <Input
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onKeyDown={handleKeyDown}
-            className="h-7"
-          />
-        ) : (
-          <p className="min-w-0 flex-1 truncate px-1.5 py-1 text-sm">
-            {displayLabel ?? title}
-          </p>
-        )}
-        {!editing && (
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              className="opacity-0 group-hover:opacity-100"
-              onClick={() => setEditing(true)}
-            >
-              <PencilIcon />
-              <span className="sr-only">Rename {title}</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              className="opacity-0 group-hover:opacity-100"
-              onClick={handleDelete}
-            >
-              <Trash2Icon />
-              <span className="sr-only">Delete {title}</span>
-            </Button>
-          </>
-        )}
-      </div>
-      {error && <p className="px-1.5 text-xs text-destructive">{error}</p>}
-    </div>
-  );
-}
 
 interface ManageEpicsStoriesPanelProps {
   trigger: React.ReactNode;
