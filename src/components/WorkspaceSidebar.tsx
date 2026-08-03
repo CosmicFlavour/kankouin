@@ -52,7 +52,10 @@ export function WorkspaceSidebar({
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border p-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Kankouin</h1>
+        <div className="flex items-center gap-2">
+          <img src="/logo.png" alt="" className="size-6 rounded-md" />
+          <h1 className="text-lg font-semibold">Kankouin</h1>
+        </div>
         <ThemeToggle />
       </div>
 
