@@ -43,6 +43,22 @@ export function useWorkspaces() {
     setWorkspaces((prev) => [...prev, created]);
   }
 
+  // Rename only; color/icon aren't editable from any UI yet, so they're
+  // left untouched (the backend COALESCEs a null field to the existing
+  // value).
+  async function updateWorkspace(workspaceId: string, name: string) {
+    const updated = await invoke<Workspace>("update_workspace", {
+      id: workspaceId,
+      name,
+      color: null,
+      icon: null,
+    });
+    setWorkspaces((prev) =>
+      prev.map((w) => (w.id === workspaceId ? updated : w)),
+    );
+    return updated;
+  }
+
   // Hard delete: cascades to every project, epic, story, task and tag in
   // the workspace (see migrations/0001_init.sql). There is no undo.
   async function deleteWorkspace(workspaceId: string) {
@@ -50,5 +66,12 @@ export function useWorkspaces() {
     setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
   }
 
-  return { workspaces, loading, error, createWorkspace, deleteWorkspace };
+  return {
+    workspaces,
+    loading,
+    error,
+    createWorkspace,
+    updateWorkspace,
+    deleteWorkspace,
+  };
 }

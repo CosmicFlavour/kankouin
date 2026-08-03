@@ -23,8 +23,14 @@ function App() {
     createDatabaseFile,
     openDatabaseFile,
   } = useDatabaseStatus();
-  const { workspaces, loading, error, createWorkspace, deleteWorkspace } =
-    useWorkspaces();
+  const {
+    workspaces,
+    loading,
+    error,
+    createWorkspace,
+    updateWorkspace,
+    deleteWorkspace,
+  } = useWorkspaces();
   const { tasks: staleTasks, loading: staleLoading, refresh: refreshStale } =
     useStaleTasks();
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
@@ -96,6 +102,8 @@ function App() {
             setSelectedProjectId(null);
           }
         }}
+        onRenameWorkspace={updateWorkspace}
+        onProjectsChanged={() => setProjectsVersion((v) => v + 1)}
         activeView={activeView}
         onSelectToday={() => setActiveView("today")}
         onSelectTags={() => setActiveView("tags")}

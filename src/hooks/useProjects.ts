@@ -57,6 +57,20 @@ export function useProjects(workspaceId: string | null, refreshKey: unknown = nu
     setProjects((prev) => [...prev, created]);
   }
 
+  // Rename only; description isn't editable from any UI yet, so it's left
+  // untouched (the backend COALESCEs a null field to the existing value).
+  async function updateProject(projectId: string, name: string) {
+    const updated = await invoke<Project>("update_project", {
+      id: projectId,
+      name,
+      description: null,
+    });
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? updated : p)),
+    );
+    return updated;
+  }
+
   // Soft delete: the backend keeps the row (archived = true) and its tasks,
   // browsable later via list_archived_projects (see useArchivedProjects).
   async function archiveProject(projectId: string) {
@@ -64,5 +78,12 @@ export function useProjects(workspaceId: string | null, refreshKey: unknown = nu
     setProjects((prev) => prev.filter((p) => p.id !== projectId));
   }
 
-  return { projects, loading, error, createProject, archiveProject };
+  return {
+    projects,
+    loading,
+    error,
+    createProject,
+    updateProject,
+    archiveProject,
+  };
 }

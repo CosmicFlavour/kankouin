@@ -55,6 +55,29 @@ describe("useWorkspaces", () => {
     });
   });
 
+  it("updateWorkspace replaces the workspace with the renamed version", async () => {
+    const renamed = { ...workspace, name: "Personal v2" };
+    mockCommands({
+      list_workspaces: () => [workspace],
+      update_workspace: () => renamed,
+    });
+
+    const { result } = renderHook(() => useWorkspaces());
+    await waitFor(() => expect(result.current.workspaces).toEqual([workspace]));
+
+    await act(async () => {
+      await result.current.updateWorkspace("ws-1", "Personal v2");
+    });
+
+    expect(result.current.workspaces).toEqual([renamed]);
+    expect(mockInvoke).toHaveBeenCalledWith("update_workspace", {
+      id: "ws-1",
+      name: "Personal v2",
+      color: null,
+      icon: null,
+    });
+  });
+
   it("deleteWorkspace removes the workspace from local state", async () => {
     mockCommands({
       list_workspaces: () => [workspace],
