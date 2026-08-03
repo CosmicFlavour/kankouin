@@ -20,9 +20,10 @@ interface WorkspaceSidebarProps {
   onDeleteWorkspace: (workspaceId: string) => Promise<void>;
   onRenameWorkspace: (workspaceId: string, name: string) => Promise<unknown>;
   onProjectsChanged?: () => void;
-  activeView: "workspace" | "today" | "tags";
+  activeView: "workspace" | "today" | "tags" | "search";
   onSelectToday: () => void;
   onSelectTags: () => void;
+  onSelectSearch: () => void;
   staleCount: number;
   onOpenDailyReview: () => void;
   projectsVersion: number;
@@ -43,6 +44,7 @@ export function WorkspaceSidebar({
   activeView,
   onSelectToday,
   onSelectTags,
+  onSelectSearch,
   staleCount,
   onOpenDailyReview,
   projectsVersion,
@@ -66,6 +68,16 @@ export function WorkspaceSidebar({
           )}
         >
           Today / This Week
+        </button>
+        <button
+          type="button"
+          onClick={onSelectSearch}
+          className={cn(
+            "rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted",
+            activeView === "search" && "bg-accent text-foreground",
+          )}
+        >
+          Search
         </button>
         <button
           type="button"

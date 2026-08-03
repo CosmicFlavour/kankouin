@@ -6,6 +6,7 @@ import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { ProjectPanel } from "@/components/ProjectPanel";
 import { TodayView } from "@/components/TodayView";
 import { TagsView } from "@/components/TagsView";
+import { SearchView } from "@/components/SearchView";
 import { DailyReviewDialog } from "@/components/DailyReviewDialog";
 import { DatabaseSetupScreen } from "@/components/DatabaseSetupScreen";
 import { Toaster } from "@/components/Toaster";
@@ -39,9 +40,9 @@ function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
   );
-  const [activeView, setActiveView] = useState<"workspace" | "today" | "tags">(
-    "workspace",
-  );
+  const [activeView, setActiveView] = useState<
+    "workspace" | "today" | "tags" | "search"
+  >("workspace");
   const [dailyReviewOpen, setDailyReviewOpen] = useState(false);
   // ProjectPanel and the sidebar tree each hold their own useProjects
   // instance with no shared cache; bumping this forces both to re-fetch so
@@ -107,6 +108,7 @@ function App() {
         activeView={activeView}
         onSelectToday={() => setActiveView("today")}
         onSelectTags={() => setActiveView("tags")}
+        onSelectSearch={() => setActiveView("search")}
         staleCount={staleTasks.length}
         onOpenDailyReview={() => setDailyReviewOpen(true)}
         projectsVersion={projectsVersion}
@@ -114,6 +116,7 @@ function App() {
       <main className="flex flex-1 flex-col p-6">
         {activeView === "today" && <TodayView />}
         {activeView === "tags" && <TagsView />}
+        {activeView === "search" && <SearchView />}
         {activeView === "workspace" && !selectedWorkspace && (
           <p className="m-auto text-muted-foreground">
             Select a workspace to get started

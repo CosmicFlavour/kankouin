@@ -211,6 +211,20 @@ pub(crate) fn list_stale(conn: &Connection, cutoff_rfc3339: &str) -> AppResult<V
     attach_tags_and_blocked(conn, tasks)
 }
 
+/// Every non-archived task across every workspace, for the search view —
+/// deliberately unfiltered by state (including `done`) so a task you
+/// already finished can still be found; archived tasks are excluded, same
+/// as every other list view.
+pub(crate) fn list_all_active(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
+    let sql =
+        format!("SELECT {TASK_COLUMNS} FROM tasks WHERE archived = 0 ORDER BY updated_at DESC");
+    let mut stmt = conn.prepare(&sql)?;
+    let tasks = stmt
+        .query_map([], row_to_task)?
+        .collect::<Result<Vec<_>, _>>()?;
+    attach_tags_and_blocked(conn, tasks)
+}
+
 fn get_detail(conn: &Connection, id: String) -> AppResult<TaskDetail> {
     let task = get_task_row(conn, &id)?;
 
@@ -676,6 +690,12 @@ pub fn unarchive_task(state: State<AppState>, id: String) -> AppResult<Task> {
 pub fn delete_task(state: State<AppState>, id: String) -> AppResult<()> {
     let conn = state.conn()?;
     delete(&conn, id)
+}
+
+#[tauri::command]
+pub fn list_all_tasks(state: State<AppState>) -> AppResult<Vec<TaskSummary>> {
+    let conn = state.conn()?;
+    list_all_active(&conn)
 }
 
 #[tauri::command]
@@ -1154,6 +1174,43 @@ mod tests {
         );
         assert!(
             !ids.contains(&archived_task.id.as_str()),
+            "archived task should be excluded"
+        );
+    }
+
+    #[test]
+    fn list_all_active_spans_workspaces_includes_done_excludes_archived() {
+        let mut conn = test_connection();
+        let project_a = make_project(&conn);
+        let project_b = make_project(&conn);
+
+        let active = create(&conn, project_a, "Active".into(), None, None, None, None).unwrap();
+
+        let done = create(
+            &conn,
+            project_b.clone(),
+            "Done".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        update_state(&mut conn, done.id.clone(), "done".into()).unwrap();
+
+        let archived = create(&conn, project_b, "Archived".into(), None, None, None, None).unwrap();
+        archive(&conn, archived.id.clone()).unwrap();
+
+        let all = list_all_active(&conn).unwrap();
+        let ids: Vec<&str> = all.iter().map(|s| s.task.id.as_str()).collect();
+
+        assert!(ids.contains(&active.id.as_str()), "active task should show");
+        assert!(
+            ids.contains(&done.id.as_str()),
+            "done task should still show — search should find finished work too"
+        );
+        assert!(
+            !ids.contains(&archived.id.as_str()),
             "archived task should be excluded"
         );
     }
