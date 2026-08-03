@@ -57,6 +57,7 @@ pub fn run() {
             commands::tasks::unarchive_task,
             commands::tasks::delete_task,
             commands::tasks::list_tasks_today,
+            commands::tasks::list_all_tasks,
             commands::tasks::add_subtask,
             commands::tasks::toggle_subtask,
             commands::daily_review::get_stale_tasks,
