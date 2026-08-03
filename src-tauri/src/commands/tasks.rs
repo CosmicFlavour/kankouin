@@ -74,7 +74,6 @@ fn row_to_subtask(row: &rusqlite::Row) -> rusqlite::Result<Subtask> {
 fn row_to_tag(row: &rusqlite::Row) -> rusqlite::Result<Tag> {
     Ok(Tag {
         id: row.get("id")?,
-        workspace_id: row.get("workspace_id")?,
         name: row.get("name")?,
         color: row.get("color")?,
     })
@@ -135,7 +134,7 @@ fn fetch_tags_for_tasks(
     task_ids: &[String],
 ) -> AppResult<HashMap<String, Vec<Tag>>> {
     let sql = format!(
-        "SELECT tt.task_id, t.id, t.workspace_id, t.name, t.color
+        "SELECT tt.task_id, t.id, t.name, t.color
          FROM task_tags tt JOIN tags t ON t.id = tt.tag_id
          WHERE tt.task_id IN ({})",
         in_placeholders(task_ids.len())
@@ -224,7 +223,7 @@ fn get_detail(conn: &Connection, id: String) -> AppResult<TaskDetail> {
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut tag_stmt = conn.prepare(
-        "SELECT t.id, t.workspace_id, t.name, t.color
+        "SELECT t.id, t.name, t.color
          FROM task_tags tt JOIN tags t ON t.id = tt.tag_id WHERE tt.task_id = ?1",
     )?;
     let tags = tag_stmt

@@ -47,7 +47,10 @@ impl AppState {
 }
 
 fn migrations() -> Migrations<'static> {
-    Migrations::new(vec![M::up(include_str!("../../migrations/0001_init.sql"))])
+    Migrations::new(vec![
+        M::up(include_str!("../../migrations/0001_init.sql")),
+        M::up(include_str!("../../migrations/0002_make_tags_global.sql")),
+    ])
 }
 
 /// Opens (creating if needed) a SQLite file at `path`, sets the same pragmas
@@ -188,6 +191,74 @@ mod tests {
             DbStatus::Ok {
                 path: path_string(&configured_path)
             }
+        );
+    }
+
+    #[test]
+    fn tags_migration_merges_same_named_tags_across_workspaces() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        conn.execute_batch(include_str!("../../migrations/0001_init.sql"))
+            .unwrap();
+
+        // Two workspaces, each with their own "urgent" tag under the old
+        // per-workspace schema, and a task in workspace B tagged with
+        // workspace B's copy — the one that will NOT survive the merge
+        // (survivor = earliest-inserted, i.e. workspace A's).
+        conn.execute_batch(
+            "
+            INSERT INTO workspaces (id, name, created_at, updated_at)
+            VALUES ('ws-a', 'A', 't', 't'), ('ws-b', 'B', 't', 't');
+
+            INSERT INTO projects (id, workspace_id, name, created_at, updated_at)
+            VALUES ('proj-b', 'ws-b', 'Proj B', 't', 't');
+
+            INSERT INTO tasks (id, project_id, title, state, state_since, created_at, updated_at)
+            VALUES ('task-1', 'proj-b', 'T', 'todo', 't', 't', 't');
+
+            INSERT INTO tags (id, workspace_id, name, color)
+            VALUES ('tag-a-urgent', 'ws-a', 'urgent', '#ff0000');
+            INSERT INTO tags (id, workspace_id, name, color)
+            VALUES ('tag-b-urgent', 'ws-b', 'urgent', '#00ff00');
+
+            INSERT INTO task_tags (task_id, tag_id) VALUES ('task-1', 'tag-b-urgent');
+            ",
+        )
+        .unwrap();
+
+        conn.execute_batch(include_str!("../../migrations/0002_make_tags_global.sql"))
+            .unwrap();
+
+        let tag_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tags WHERE name = 'urgent'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            tag_count, 1,
+            "duplicate same-named tags must merge into one"
+        );
+
+        let surviving_tag_id: String = conn
+            .query_row("SELECT id FROM tags WHERE name = 'urgent'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            surviving_tag_id, "tag-a-urgent",
+            "earliest-inserted tag (lowest rowid) should be the survivor"
+        );
+
+        let repointed_tag_id: String = conn
+            .query_row(
+                "SELECT tag_id FROM task_tags WHERE task_id = 'task-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            repointed_tag_id, surviving_tag_id,
+            "task_tags row pointing at the non-surviving duplicate must be repointed, not dropped"
         );
     }
 }

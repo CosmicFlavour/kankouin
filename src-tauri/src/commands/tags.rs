@@ -9,32 +9,35 @@ use crate::models::Tag;
 fn row_to_tag(row: &rusqlite::Row) -> rusqlite::Result<Tag> {
     Ok(Tag {
         id: row.get("id")?,
-        workspace_id: row.get("workspace_id")?,
         name: row.get("name")?,
         color: row.get("color")?,
     })
 }
 
-fn list(conn: &Connection, workspace_id: String) -> AppResult<Vec<Tag>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, workspace_id, name, color FROM tags WHERE workspace_id = ?1 ORDER BY name ASC",
-    )?;
-    let rows = stmt.query_map(params![workspace_id], row_to_tag)?;
+fn list(conn: &Connection) -> AppResult<Vec<Tag>> {
+    let mut stmt = conn.prepare("SELECT id, name, color FROM tags ORDER BY name ASC")?;
+    let rows = stmt.query_map([], row_to_tag)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-fn create(conn: &Connection, workspace_id: String, name: String, color: String) -> AppResult<Tag> {
+fn create(conn: &Connection, name: String, color: String) -> AppResult<Tag> {
     let id = Uuid::new_v4().to_string();
     conn.execute(
-        "INSERT INTO tags (id, workspace_id, name, color) VALUES (?1, ?2, ?3, ?4)",
-        params![id, workspace_id, name, color],
+        "INSERT INTO tags (id, name, color) VALUES (?1, ?2, ?3)",
+        params![id, name, color],
     )?;
-    Ok(Tag {
-        id,
-        workspace_id,
-        name,
-        color,
-    })
+    Ok(Tag { id, name, color })
+}
+
+fn update(conn: &Connection, id: String, name: String, color: String) -> AppResult<Tag> {
+    let changed = conn.execute(
+        "UPDATE tags SET name = ?2, color = ?3 WHERE id = ?1",
+        params![id, name, color],
+    )?;
+    if changed == 0 {
+        return Err(AppError::NotFound);
+    }
+    Ok(Tag { id, name, color })
 }
 
 fn delete(conn: &Connection, id: String) -> AppResult<()> {
@@ -66,20 +69,26 @@ fn replace_task_tags(
 }
 
 #[tauri::command]
-pub fn list_tags(state: State<AppState>, workspace_id: String) -> AppResult<Vec<Tag>> {
+pub fn list_tags(state: State<AppState>) -> AppResult<Vec<Tag>> {
     let conn = state.conn()?;
-    list(&conn, workspace_id)
+    list(&conn)
 }
 
 #[tauri::command]
-pub fn create_tag(
+pub fn create_tag(state: State<AppState>, name: String, color: String) -> AppResult<Tag> {
+    let conn = state.conn()?;
+    create(&conn, name, color)
+}
+
+#[tauri::command]
+pub fn update_tag(
     state: State<AppState>,
-    workspace_id: String,
+    id: String,
     name: String,
     color: String,
 ) -> AppResult<Tag> {
     let conn = state.conn()?;
-    create(&conn, workspace_id, name, color)
+    update(&conn, id, name, color)
 }
 
 #[tauri::command]
@@ -116,40 +125,45 @@ mod tests {
     #[test]
     fn create_list_delete_roundtrip() {
         let conn = test_connection();
-        let workspace_id = workspaces::create(&conn, "WS2".into(), None, None)
-            .unwrap()
-            .id;
 
-        let tag = create(
-            &conn,
-            workspace_id.clone(),
-            "urgent".into(),
-            "#ff0000".into(),
-        )
-        .unwrap();
+        let tag = create(&conn, "urgent".into(), "#ff0000".into()).unwrap();
         assert_eq!(tag.name, "urgent");
 
-        let all = list(&conn, workspace_id).unwrap();
+        let all = list(&conn).unwrap();
         assert_eq!(all.len(), 1);
 
         delete(&conn, tag.id).unwrap();
     }
 
     #[test]
+    fn update_roundtrip() {
+        let conn = test_connection();
+        let tag = create(&conn, "urgent".into(), "#ff0000".into()).unwrap();
+
+        let updated = update(&conn, tag.id.clone(), "not-urgent".into(), "#00ff00".into()).unwrap();
+        assert_eq!(updated.name, "not-urgent");
+        assert_eq!(updated.color, "#00ff00");
+
+        let all = list(&conn).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].name, "not-urgent");
+    }
+
+    #[test]
+    fn update_missing_tag_is_not_found() {
+        let conn = test_connection();
+        let err = update(&conn, "missing".into(), "x".into(), "#000000".into()).unwrap_err();
+        assert!(matches!(err, AppError::NotFound));
+    }
+
+    #[test]
     fn set_task_tags_replaces_existing_set() {
         let mut conn = test_connection();
         let project_id = make_project(&conn);
-        let workspace_id: String = conn
-            .query_row(
-                "SELECT workspace_id FROM projects WHERE id = ?1",
-                params![project_id.clone()],
-                |r| r.get(0),
-            )
-            .unwrap();
         let task = tasks::create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
 
-        let tag_a = create(&conn, workspace_id.clone(), "a".into(), "#111111".into()).unwrap();
-        let tag_b = create(&conn, workspace_id, "b".into(), "#222222".into()).unwrap();
+        let tag_a = create(&conn, "a".into(), "#111111".into()).unwrap();
+        let tag_b = create(&conn, "b".into(), "#222222".into()).unwrap();
 
         let count_for_tag = |conn: &Connection, tag_id: &str| -> i64 {
             conn.query_row(

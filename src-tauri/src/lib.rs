@@ -42,6 +42,7 @@ pub fn run() {
             commands::user_stories::delete_user_story,
             commands::tags::list_tags,
             commands::tags::create_tag,
+            commands::tags::update_tag,
             commands::tags::delete_tag,
             commands::tags::set_task_tags,
             commands::tasks::list_tasks,
