@@ -25,6 +25,7 @@ function mockBackend(overrides: Record<string, () => unknown> = {}) {
     delete_tag: () => {
       throw new Error("not mocked");
     },
+    list_all_tasks: () => [],
     ...overrides,
   });
 }
@@ -102,6 +103,22 @@ describe("App view navigation", () => {
     await screen.findByRole("heading", { name: "Today / This Week" });
     expect(
       screen.queryByRole("heading", { name: "Tags" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switching to the Search nav entry shows SearchView and hides the workspace pane", async () => {
+    mockBackend({ get_stale_tasks: () => [] });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByText("Select a workspace to get started");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Search" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Select a workspace to get started"),
     ).not.toBeInTheDocument();
   });
 });
