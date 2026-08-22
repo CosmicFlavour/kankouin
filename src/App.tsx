@@ -10,6 +10,7 @@ import { TodayView } from "@/components/TodayView";
 import { TagsView } from "@/components/TagsView";
 import { SearchView } from "@/components/SearchView";
 import { DailyReviewDialog } from "@/components/DailyReviewDialog";
+import { ShortcutsDialog } from "@/components/ShortcutsDialog";
 import { DatabaseSetupScreen } from "@/components/DatabaseSetupScreen";
 import { Toaster } from "@/components/Toaster";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -46,6 +47,7 @@ function App() {
     "workspace" | "today" | "tags" | "search"
   >("workspace");
   const [dailyReviewOpen, setDailyReviewOpen] = useState(false);
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
   // ProjectPanel and the sidebar tree each hold their own useProjects
   // instance with no shared cache; bumping this forces both to re-fetch so
   // archiving from one is reflected in the other (see useProjects.ts).
@@ -148,6 +150,19 @@ function App() {
     return () => window.removeEventListener("keydown", handleSearchShortcut);
   }, []);
 
+  useEffect(() => {
+    function handleHelpShortcut(event: KeyboardEvent) {
+      if (event.key !== "F1") return;
+      if (document.querySelector('[role="dialog"]')) return;
+
+      event.preventDefault();
+      setShortcutsHelpOpen(true);
+    }
+
+    window.addEventListener("keydown", handleHelpShortcut);
+    return () => window.removeEventListener("keydown", handleHelpShortcut);
+  }, []);
+
   if (dbStatusLoading || !dbStatus) {
     return null;
   }
@@ -233,6 +248,10 @@ function App() {
         onOpenChange={setDailyReviewOpen}
         tasks={staleTasks}
         onFinished={refreshStale}
+      />
+      <ShortcutsDialog
+        open={shortcutsHelpOpen}
+        onOpenChange={setShortcutsHelpOpen}
       />
       <Toaster />
       <ConfirmDialog />

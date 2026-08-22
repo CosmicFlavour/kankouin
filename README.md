@@ -30,6 +30,7 @@ lives in a SQLite file on your machine.
 | `r` | Previous project (cycles across all workspaces) |
 | `o` | Go to Today / This Week view |
 | `s` or `/` | Go to Search view |
+| `F1` | Show the keyboard shortcuts list |
 | `Ctrl+Q` / `Cmd+Q` | Quit the app |
 
 Shortcuts are ignored while typing in a text field or while a dialog is open.
