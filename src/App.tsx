@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useStaleTasks } from "@/hooks/useStaleTasks";
 import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
@@ -58,6 +59,17 @@ function App() {
     localStorage.setItem(DAILY_REVIEW_LAST_SHOWN_KEY, today);
     setDailyReviewOpen(true);
   }, [staleLoading, staleTasks]);
+
+  useEffect(() => {
+    const handleQuit = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "q" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        getCurrentWindow().close();
+      }
+    };
+    window.addEventListener("keydown", handleQuit);
+    return () => window.removeEventListener("keydown", handleQuit);
+  }, []);
 
   if (dbStatusLoading || !dbStatus) {
     return null;
