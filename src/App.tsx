@@ -107,6 +107,26 @@ function App() {
     return () => window.removeEventListener("keydown", handleProjectSwitch);
   }, [selectedProjectId, allProjects]);
 
+  useEffect(() => {
+    function handleOverviewShortcut(event: KeyboardEvent) {
+      if (event.key.toLowerCase() !== "o") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (document.querySelector('[role="dialog"]')) return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
+        return;
+      }
+
+      event.preventDefault();
+      setActiveView("today");
+    }
+
+    window.addEventListener("keydown", handleOverviewShortcut);
+    return () => window.removeEventListener("keydown", handleOverviewShortcut);
+  }, []);
+
   if (dbStatusLoading || !dbStatus) {
     return null;
   }
