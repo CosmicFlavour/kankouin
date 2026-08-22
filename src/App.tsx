@@ -127,6 +127,27 @@ function App() {
     return () => window.removeEventListener("keydown", handleOverviewShortcut);
   }, []);
 
+  useEffect(() => {
+    function handleSearchShortcut(event: KeyboardEvent) {
+      const key = event.key.toLowerCase();
+      if (key !== "s" && key !== "/") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (document.querySelector('[role="dialog"]')) return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
+        return;
+      }
+
+      event.preventDefault();
+      setActiveView("search");
+    }
+
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
+
   if (dbStatusLoading || !dbStatus) {
     return null;
   }
