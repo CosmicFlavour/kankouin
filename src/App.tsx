@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { useAllProjects } from "@/hooks/useAllProjects";
 import { useStaleTasks } from "@/hooks/useStaleTasks";
 import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
@@ -51,6 +52,7 @@ function App() {
   const [projectsVersion, setProjectsVersion] = useState(0);
 
   const selectedWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId);
+  const allProjects = useAllProjects(workspaces, projectsVersion);
 
   useEffect(() => {
     if (staleLoading || staleTasks.length === 0) return;
@@ -70,6 +72,40 @@ function App() {
     window.addEventListener("keydown", handleQuit);
     return () => window.removeEventListener("keydown", handleQuit);
   }, []);
+
+  useEffect(() => {
+    function handleProjectSwitch(event: KeyboardEvent) {
+      const key = event.key.toLowerCase();
+      if (key !== "r" && key !== "t") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (allProjects.length === 0) return;
+      if (document.querySelector('[role="dialog"]')) return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
+        return;
+      }
+
+      event.preventDefault();
+      const currentIndex = allProjects.findIndex(
+        (p) => p.id === selectedProjectId,
+      );
+      const direction = key === "t" ? 1 : -1;
+      const nextIndex =
+        currentIndex === -1
+          ? 0
+          : (currentIndex + direction + allProjects.length) %
+            allProjects.length;
+      const nextProject = allProjects[nextIndex];
+      setActiveView("workspace");
+      setSelectedWorkspaceId(nextProject.workspace_id);
+      setSelectedProjectId(nextProject.id);
+    }
+
+    window.addEventListener("keydown", handleProjectSwitch);
+    return () => window.removeEventListener("keydown", handleProjectSwitch);
+  }, [selectedProjectId, allProjects]);
 
   if (dbStatusLoading || !dbStatus) {
     return null;
