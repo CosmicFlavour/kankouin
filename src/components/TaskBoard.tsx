@@ -220,6 +220,30 @@ export function TaskBoard({
     if (wasArchived && showHidden) refreshArchivedTasks();
   }
 
+  useEffect(() => {
+    function handleNewTaskShortcut(event: KeyboardEvent) {
+      if (event.key.toLowerCase() !== "n") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (taskDialogOpen) return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      setCreatingTask(true);
+    }
+
+    window.addEventListener("keydown", handleNewTaskShortcut);
+    return () => window.removeEventListener("keydown", handleNewTaskShortcut);
+  }, [taskDialogOpen]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );

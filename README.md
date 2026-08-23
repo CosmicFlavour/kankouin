@@ -21,6 +21,20 @@ lives in a SQLite file on your machine.
   encrypted copy of the local database. Passphrase-derived key (Argon2), never leaves
   Rust, never touches the webview.
 
+## Keyboard shortcuts
+
+| Key | Action |
+| --- | --- |
+| `n` | New task (while a project is open) |
+| `t` | Next project (cycles across all workspaces) |
+| `r` | Previous project (cycles across all workspaces) |
+| `o` | Go to Today / This Week view |
+| `s` or `/` | Go to Search view |
+| `F1` | Show the keyboard shortcuts list |
+| `Ctrl+Q` / `Cmd+Q` | Quit the app |
+
+Shortcuts are ignored while typing in a text field or while a dialog is open.
+
 ## Tech stack
 
 - **Shell**: Tauri v2 (Rust backend, native webview)

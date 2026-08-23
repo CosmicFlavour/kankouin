@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { mockCommands } from "@/test/tauriMock";
@@ -119,6 +119,78 @@ describe("App view navigation", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Select a workspace to get started"),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("App keyboard shortcuts", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("'o' switches to the Today view", async () => {
+    mockBackend({ get_stale_tasks: () => [], list_tasks_today: () => [] });
+    render(<App />);
+    await screen.findByText("Select a workspace to get started");
+
+    fireEvent.keyDown(window, { key: "o" });
+
+    expect(
+      await screen.findByRole("heading", { name: "Today / This Week" }),
+    ).toBeInTheDocument();
+  });
+
+  it("'s' switches to the Search view", async () => {
+    mockBackend({ get_stale_tasks: () => [] });
+    render(<App />);
+    await screen.findByText("Select a workspace to get started");
+
+    fireEvent.keyDown(window, { key: "s" });
+
+    expect(
+      await screen.findByRole("heading", { name: "Search" }),
+    ).toBeInTheDocument();
+  });
+
+  it("'/' switches to the Search view", async () => {
+    mockBackend({ get_stale_tasks: () => [] });
+    render(<App />);
+    await screen.findByText("Select a workspace to get started");
+
+    fireEvent.keyDown(window, { key: "/" });
+
+    expect(
+      await screen.findByRole("heading", { name: "Search" }),
+    ).toBeInTheDocument();
+  });
+
+  it("F1 opens the shortcuts help dialog", async () => {
+    mockBackend({ get_stale_tasks: () => [] });
+    render(<App />);
+    await screen.findByText("Select a workspace to get started");
+
+    fireEvent.keyDown(window, { key: "F1" });
+
+    expect(await screen.findByText("Keyboard shortcuts")).toBeInTheDocument();
+    expect(
+      screen.getByText("Go to Today / This Week view"),
+    ).toBeInTheDocument();
+  });
+
+  it("ignores the 'o' shortcut while typing in a text field", async () => {
+    mockBackend({ get_stale_tasks: () => [] });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText("Select a workspace to get started");
+
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    const searchInput = await screen.findByPlaceholderText(
+      "Search tasks by title...",
+    );
+    fireEvent.keyDown(searchInput, { key: "o" });
+
+    expect(
+      screen.queryByRole("heading", { name: "Today / This Week" }),
     ).not.toBeInTheDocument();
   });
 });
