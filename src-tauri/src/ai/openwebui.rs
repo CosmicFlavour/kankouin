@@ -91,6 +91,7 @@ fn to_wire_message(msg: &ChatMessage) -> WireMessage {
         ChatRole::User => "user",
         ChatRole::Assistant => "assistant",
         ChatRole::Tool => "tool",
+        ChatRole::System => "system",
     };
     // An assistant message that *is* a tool-call request carries no text of
     // its own — sent as `null`, matching the OpenAI wire format, rather

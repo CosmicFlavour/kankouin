@@ -5,7 +5,7 @@ use crate::error::{AppError, AppResult};
 
 use super::{
     AIProvider, AIResponse, ChatMessage, ChatRole, ToolCall, ToolContext, ToolDefinition,
-    ToolExecutor,
+    ToolExecutionResult, ToolExecutor,
 };
 
 /// Deterministic stand-in for a real AI backend, driven entirely by the
@@ -49,9 +49,12 @@ impl ToolExecutor for MockToolExecutor {
         call: &ToolCall,
         _ctx: &ToolContext,
         _db: &AppState,
-    ) -> AppResult<serde_json::Value> {
+    ) -> AppResult<ToolExecutionResult> {
         match call.name.as_str() {
-            "mock_tool" => Ok(json!({ "ok": true })),
+            "mock_tool" => Ok(ToolExecutionResult {
+                value: json!({ "ok": true }),
+                logged_action: None,
+            }),
             other => Err(AppError::Invalid(format!("unknown tool {other:?}"))),
         }
     }

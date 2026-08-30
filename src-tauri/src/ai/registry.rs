@@ -2,11 +2,11 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::commands::{epics, projects, tags, tasks, user_stories};
+use crate::commands::{ai_log, epics, projects, tags, tasks, user_stories};
 use crate::db::AppState;
 use crate::error::{AppError, AppResult};
 
-use super::{ToolCall, ToolContext, ToolDefinition, ToolExecutor};
+use super::{ToolCall, ToolContext, ToolDefinition, ToolExecutionResult, ToolExecutor};
 
 /// The full toolbox the AI is told about: JSON-schema descriptions of every
 /// command `CommandToolExecutor` knows how to dispatch. `project_id` is
@@ -335,23 +335,63 @@ fn merge_context(args: Value, ctx: &ToolContext) -> Value {
 /// "ToolRegistry" from the roadmap.
 pub struct CommandToolExecutor;
 
+/// Wraps a tool result with no logged action — the common case for
+/// read-only tools.
+fn unlogged(value: AppResult<Value>) -> AppResult<ToolExecutionResult> {
+    Ok(ToolExecutionResult {
+        value: value?,
+        logged_action: None,
+    })
+}
+
 impl ToolExecutor for CommandToolExecutor {
-    fn execute(&self, call: &ToolCall, ctx: &ToolContext, db: &AppState) -> AppResult<Value> {
+    fn execute(
+        &self,
+        call: &ToolCall,
+        ctx: &ToolContext,
+        db: &AppState,
+    ) -> AppResult<ToolExecutionResult> {
         let args = merge_context(call.arguments.clone(), ctx);
         let mut conn = db.conn()?;
 
         match call.name.as_str() {
             "add_subtask" => {
                 let a: AddSubtaskArgs = parse_args(args)?;
-                to_value(tasks::insert_subtask(&conn, a.task_id, a.title)?)
+                let subtask = tasks::insert_subtask(&conn, a.task_id.clone(), a.title.clone())?;
+                let logged = ai_log::record(
+                    &conn,
+                    "add_subtask",
+                    &call.arguments,
+                    format!("Added subtask \"{}\"", a.title),
+                    Some(a.task_id),
+                    None,
+                )?;
+                Ok(ToolExecutionResult {
+                    value: to_value(subtask)?,
+                    logged_action: Some(logged),
+                })
             }
             "set_task_parent" => {
                 let a: SetTaskParentArgs = parse_args(args)?;
-                to_value(tasks::set_parent(&conn, a.id, a.epic_id, a.user_story_id)?)
+                let before = tasks::get(&conn, &a.id)?;
+                let updated = tasks::set_parent(&conn, a.id.clone(), a.epic_id, a.user_story_id)?;
+                let logged = ai_log::record(
+                    &conn,
+                    "set_task_parent",
+                    &call.arguments,
+                    format!("Changed parent of \"{}\"", before.title),
+                    Some(a.id),
+                    Some(&before),
+                )?;
+                Ok(ToolExecutionResult {
+                    value: to_value(updated)?,
+                    logged_action: Some(logged),
+                })
             }
             "create_task" => {
                 let a: CreateTaskArgs = parse_args(args)?;
-                to_value(tasks::create(
+                let title = a.title.clone();
+                let created = tasks::create(
                     &conn,
                     a.project_id,
                     a.title,
@@ -359,64 +399,142 @@ impl ToolExecutor for CommandToolExecutor {
                     a.epic_id,
                     a.user_story_id,
                     a.priority,
-                )?)
+                )?;
+                let logged = ai_log::record(
+                    &conn,
+                    "create_task",
+                    &call.arguments,
+                    format!("Created task \"{title}\""),
+                    Some(created.id.clone()),
+                    None,
+                )?;
+                Ok(ToolExecutionResult {
+                    value: to_value(created)?,
+                    logged_action: Some(logged),
+                })
             }
             "update_task" => {
                 let a: UpdateTaskArgs = parse_args(args)?;
-                to_value(tasks::update(
+                let before = tasks::get(&conn, &a.id)?;
+                let updated = tasks::update(
                     &conn,
-                    a.id,
+                    a.id.clone(),
                     a.title,
                     a.description,
                     a.priority,
                     a.epic_id,
                     a.user_story_id,
-                )?)
+                )?;
+                let logged = ai_log::record(
+                    &conn,
+                    "update_task",
+                    &call.arguments,
+                    format!("Updated \"{}\"", before.title),
+                    Some(a.id),
+                    Some(&before),
+                )?;
+                Ok(ToolExecutionResult {
+                    value: to_value(updated)?,
+                    logged_action: Some(logged),
+                })
             }
             "move_task_state" => {
                 let a: MoveTaskStateArgs = parse_args(args)?;
-                to_value(tasks::update_state(&mut conn, a.id, a.new_state)?)
+                let before = tasks::get(&conn, &a.id)?;
+                let updated = tasks::update_state(&mut conn, a.id.clone(), a.new_state.clone())?;
+                let logged = ai_log::record(
+                    &conn,
+                    "move_task_state",
+                    &call.arguments,
+                    format!(
+                        "Moved \"{}\" from {} to {}",
+                        before.title, before.state, a.new_state
+                    ),
+                    Some(a.id),
+                    Some(&before),
+                )?;
+                Ok(ToolExecutionResult {
+                    value: to_value(updated)?,
+                    logged_action: Some(logged),
+                })
             }
             "archive_task" => {
                 let a: ArchiveTaskArgs = parse_args(args)?;
-                tasks::archive(&conn, a.id)?;
-                Ok(json!({ "archived": true }))
+                let before = tasks::get(&conn, &a.id)?;
+                tasks::archive(&conn, a.id.clone())?;
+                let logged = ai_log::record(
+                    &conn,
+                    "archive_task",
+                    &call.arguments,
+                    format!("Archived \"{}\"", before.title),
+                    Some(a.id),
+                    Some(&before),
+                )?;
+                Ok(ToolExecutionResult {
+                    value: json!({ "archived": true }),
+                    logged_action: Some(logged),
+                })
             }
             "list_tasks" => {
                 let a: ListTasksArgs = parse_args(args)?;
-                to_value(tasks::list(&conn, a.project_id)?)
+                unlogged(to_value(tasks::list(&conn, a.project_id)?))
             }
             "get_task_details" => {
                 let a: GetTaskDetailsArgs = parse_args(args)?;
-                to_value(tasks::get_detail(&conn, a.id)?)
+                unlogged(to_value(tasks::get_detail(&conn, a.id)?))
             }
             "list_projects" => {
                 let a: ListProjectsArgs = parse_args(args)?;
-                to_value(projects::list(&conn, a.workspace_id)?)
+                unlogged(to_value(projects::list(&conn, a.workspace_id)?))
             }
-            "list_tags" => to_value(tags::list(&conn)?),
+            "list_tags" => unlogged(to_value(tags::list(&conn)?)),
             "list_epics" => {
                 let a: ListEpicsArgs = parse_args(args)?;
-                to_value(epics::list(&conn, a.project_id)?)
+                unlogged(to_value(epics::list(&conn, a.project_id)?))
             }
             "list_user_stories" => {
                 let a: ListUserStoriesArgs = parse_args(args)?;
-                to_value(user_stories::list(&conn, a.project_id)?)
+                unlogged(to_value(user_stories::list(&conn, a.project_id)?))
             }
             "set_task_tags" => {
                 let a: SetTaskTagsArgs = parse_args(args)?;
+                let task_id = a.task_id.clone();
                 tags::replace_task_tags(&mut conn, a.task_id, a.tag_ids)?;
-                Ok(json!({ "ok": true }))
+                let logged = ai_log::record(
+                    &conn,
+                    "set_task_tags",
+                    &call.arguments,
+                    format!("Updated tags on task {task_id}"),
+                    Some(task_id),
+                    None,
+                )?;
+                Ok(ToolExecutionResult {
+                    value: json!({ "ok": true }),
+                    logged_action: Some(logged),
+                })
             }
             "set_deadline" => {
                 let a: SetDeadlineArgs = parse_args(args)?;
-                to_value(tasks::apply_deadline(
+                let before = tasks::get(&conn, &a.id)?;
+                let updated = tasks::apply_deadline(
                     &conn,
-                    a.id,
+                    a.id.clone(),
                     a.deadline_type,
                     a.exact_date,
                     a.fuzzy_bucket,
-                )?)
+                )?;
+                let logged = ai_log::record(
+                    &conn,
+                    "set_deadline",
+                    &call.arguments,
+                    format!("Changed deadline of \"{}\"", before.title),
+                    Some(a.id),
+                    Some(&before),
+                )?;
+                Ok(ToolExecutionResult {
+                    value: to_value(updated)?,
+                    logged_action: Some(logged),
+                })
             }
             other => Err(AppError::Invalid(format!("unknown tool {other:?}"))),
         }
@@ -453,7 +571,7 @@ mod tests {
         let project_id = make_project(&db);
         let ctx = ToolContext {
             project_id: Some(project_id.clone()),
-            workspace_id: None,
+            ..Default::default()
         };
         let executor = CommandToolExecutor;
 
@@ -464,8 +582,11 @@ mod tests {
         };
 
         let result = executor.execute(&call, &ctx, &db).unwrap();
-        assert_eq!(result["project_id"], json!(project_id));
-        assert_eq!(result["title"], json!("Write tests"));
+        assert_eq!(result.value["project_id"], json!(project_id));
+        assert_eq!(result.value["title"], json!("Write tests"));
+        let logged = result.logged_action.unwrap();
+        assert!(!logged.revertible);
+        assert_eq!(logged.summary, "Created task \"Write tests\"");
     }
 
     #[test]
@@ -475,7 +596,7 @@ mod tests {
         let explicit_project = make_project(&db);
         let ctx = ToolContext {
             project_id: Some(context_project),
-            workspace_id: None,
+            ..Default::default()
         };
         let executor = CommandToolExecutor;
 
@@ -486,7 +607,7 @@ mod tests {
         };
 
         let result = executor.execute(&call, &ctx, &db).unwrap();
-        assert_eq!(result["project_id"], json!(explicit_project));
+        assert_eq!(result.value["project_id"], json!(explicit_project));
     }
 
     #[test]
@@ -508,12 +629,14 @@ mod tests {
         let result = executor
             .execute(&call, &ToolContext::default(), &db)
             .unwrap();
-        assert_eq!(result["title"], json!("Step 1"));
-        assert_eq!(result["done"], json!(false));
+        assert_eq!(result.value["title"], json!("Step 1"));
+        assert_eq!(result.value["done"], json!(false));
+        let logged = result.logged_action.unwrap();
+        assert!(!logged.revertible, "add_subtask is not revertible");
     }
 
     #[test]
-    fn list_tags_returns_every_tag() {
+    fn list_tags_returns_every_tag_and_is_not_logged() {
         let db = test_db();
         let conn = db.conn().unwrap();
         tags::create(&conn, "urgent".into(), "#ff0000".into()).unwrap();
@@ -530,12 +653,14 @@ mod tests {
             .execute(&call, &ToolContext::default(), &db)
             .unwrap();
         let names: Vec<&str> = result
+            .value
             .as_array()
             .unwrap()
             .iter()
             .map(|t| t["name"].as_str().unwrap())
             .collect();
         assert_eq!(names, vec!["urgent"]);
+        assert!(result.logged_action.is_none());
     }
 
     #[test]
@@ -547,7 +672,7 @@ mod tests {
         drop(conn);
         let ctx = ToolContext {
             project_id: Some(project_id),
-            workspace_id: None,
+            ..Default::default()
         };
 
         let executor = CommandToolExecutor;
@@ -558,7 +683,7 @@ mod tests {
         };
 
         let result = executor.execute(&call, &ctx, &db).unwrap();
-        assert_eq!(result[0]["title"], json!("Launch"));
+        assert_eq!(result.value[0]["title"], json!("Launch"));
     }
 
     #[test]
@@ -570,7 +695,7 @@ mod tests {
         drop(conn);
         let ctx = ToolContext {
             project_id: Some(project_id),
-            workspace_id: None,
+            ..Default::default()
         };
 
         let executor = CommandToolExecutor;
@@ -581,7 +706,7 @@ mod tests {
         };
 
         let result = executor.execute(&call, &ctx, &db).unwrap();
-        assert_eq!(result[0]["title"], json!("As a user..."));
+        assert_eq!(result.value[0]["title"], json!("As a user..."));
     }
 
     #[test]
@@ -608,5 +733,78 @@ mod tests {
         names.sort();
         names.dedup();
         assert_eq!(names.len(), tools.len());
+    }
+
+    /// Covers the roadmap's specific "risky 5": each must log with a
+    /// before-state snapshot (`revertible: true`), matching what the
+    /// user flagged as needing a safety net.
+    #[test]
+    fn the_five_task_mutating_tools_log_a_revertible_action() {
+        let db = test_db();
+        let project_id = make_project(&db);
+        let conn = db.conn().unwrap();
+        let task = tasks::create(
+            &conn,
+            project_id.clone(),
+            "T".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        drop(conn);
+        let executor = CommandToolExecutor;
+        let ctx = ToolContext::default();
+
+        let cases: Vec<(&str, serde_json::Value)> = vec![
+            ("update_task", json!({ "id": task.id, "title": "Renamed" })),
+            (
+                "move_task_state",
+                json!({ "id": task.id, "new_state": "doing" }),
+            ),
+            ("set_task_parent", json!({ "id": task.id, "epic_id": null })),
+            (
+                "set_deadline",
+                json!({ "id": task.id, "deadline_type": "fuzzy", "fuzzy_bucket": "this_week" }),
+            ),
+            ("archive_task", json!({ "id": task.id })),
+        ];
+
+        for (name, arguments) in cases {
+            let call = ToolCall {
+                id: "1".into(),
+                name: name.into(),
+                arguments,
+            };
+            let result = executor.execute(&call, &ctx, &db).unwrap();
+            let logged = result
+                .logged_action
+                .unwrap_or_else(|| panic!("{name} should log an action"));
+            assert!(logged.revertible, "{name} should be revertible");
+            assert_eq!(logged.task_id.as_deref(), Some(task.id.as_str()));
+        }
+    }
+
+    #[test]
+    fn set_task_tags_logs_a_non_revertible_action() {
+        let db = test_db();
+        let project_id = make_project(&db);
+        let conn = db.conn().unwrap();
+        let task = tasks::create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        drop(conn);
+        let executor = CommandToolExecutor;
+
+        let call = ToolCall {
+            id: "1".into(),
+            name: "set_task_tags".into(),
+            arguments: json!({ "task_id": task.id, "tag_ids": [] }),
+        };
+
+        let result = executor
+            .execute(&call, &ToolContext::default(), &db)
+            .unwrap();
+        let logged = result.logged_action.unwrap();
+        assert!(!logged.revertible);
     }
 }

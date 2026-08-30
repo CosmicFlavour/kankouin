@@ -28,6 +28,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::ai::chat_with_ai,
             commands::ai::test_ai_connection,
+            commands::ai::reset_ai_conversation,
+            commands::ai_log::revert_ai_action,
             commands::workspaces::list_workspaces,
             commands::workspaces::create_workspace,
             commands::workspaces::update_workspace,

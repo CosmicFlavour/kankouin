@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::AppState;
 use crate::error::AppResult;
-use crate::models::Settings;
+use crate::models::{AiActionLogEntry, Settings};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -15,6 +15,10 @@ pub enum ChatRole {
     User,
     Assistant,
     Tool,
+    /// Injected by the orchestrator (never by a human or the AI) to tell
+    /// the model when the frontend's project/workspace context changes
+    /// mid-conversation — see `orchestrator::send_message`.
+    System,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +70,15 @@ impl ChatMessage {
             content: content.into(),
             tool_calls: Vec::new(),
             tool_call_id: Some(call_id.into()),
+        }
+    }
+
+    pub fn system(content: impl Into<String>) -> Self {
+        Self {
+            role: ChatRole::System,
+            content: content.into(),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
         }
     }
 }
@@ -123,14 +136,32 @@ pub fn resolve_provider(settings: &Settings) -> Box<dyn AIProvider> {
     }
 }
 
-/// Frontend-supplied context (e.g. the project currently open in the UI)
-/// that gets injected into a tool call's arguments automatically when the
-/// AI omits them — so it doesn't need to be told, or guess, `project_id`
-/// for a request that's implicitly "in the task the user is looking at".
+/// Frontend-supplied context (e.g. the project currently open in the UI).
+/// `project_id`/`workspace_id` get injected into a tool call's arguments
+/// automatically when the AI omits them (see `registry::merge_context`) —
+/// so it doesn't need to be told, or guess, `project_id` for a request
+/// that's implicitly "in the task the user is looking at". `project_name`/
+/// `workspace_name` are display-only, used solely by
+/// `orchestrator::send_message` to tell the model in prose when this
+/// context changes mid-conversation — never used for tool-argument
+/// injection.
 #[derive(Debug, Clone, Default)]
 pub struct ToolContext {
     pub project_id: Option<String>,
     pub workspace_id: Option<String>,
+    pub project_name: Option<String>,
+    pub workspace_name: Option<String>,
+}
+
+/// What executing a single tool call produced: the value fed back to the
+/// AI as the tool result, plus (for mutating tools) the audit-log entry
+/// `ai_log::record` wrote for it — `None` for read-only tools, which
+/// aren't logged at all (the trail is about what changed, not what was
+/// queried).
+#[derive(Debug)]
+pub struct ToolExecutionResult {
+    pub value: serde_json::Value,
+    pub logged_action: Option<AiActionLogEntry>,
 }
 
 /// Executes a single tool call and returns its result. `registry` is the
@@ -143,7 +174,18 @@ pub trait ToolExecutor: Send + Sync {
         call: &ToolCall,
         ctx: &ToolContext,
         db: &AppState,
-    ) -> AppResult<serde_json::Value>;
+    ) -> AppResult<ToolExecutionResult>;
+}
+
+/// What a full `chat_with_ai` turn produced: the AI's final reply, plus
+/// every mutating tool call it made along the way (possibly across
+/// several rounds of tool calls within the turn — see
+/// `orchestrator::MAX_ITERATIONS`), so the frontend can show an inline
+/// "N actions taken" trail under the reply.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChatTurnResult {
+    pub reply: String,
+    pub actions: Vec<AiActionLogEntry>,
 }
 
 /// Managed Tauri state for the AI chat feature. Kept separate from

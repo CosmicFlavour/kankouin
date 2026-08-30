@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod ai_log;
 pub mod cloud_sync;
 pub mod crypto;
 pub mod daily_review;

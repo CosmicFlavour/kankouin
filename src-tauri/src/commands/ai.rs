@@ -5,6 +5,7 @@ use crate::commands::settings;
 use crate::db::AppState;
 use crate::error::{AppError, AppResult};
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn chat_with_ai(
     app: AppHandle,
@@ -13,12 +14,16 @@ pub fn chat_with_ai(
     message: String,
     project_id: Option<String>,
     workspace_id: Option<String>,
-) -> AppResult<String> {
+    project_name: Option<String>,
+    workspace_name: Option<String>,
+) -> AppResult<ai::ChatTurnResult> {
     let config_dir = app.path().app_config_dir()?;
     let provider = ai::resolve_provider(&settings::read(&config_dir));
     let ctx = ToolContext {
         project_id,
         workspace_id,
+        project_name,
+        workspace_name,
     };
     ai_state.orchestrator.send_message(
         provider.as_ref(),
@@ -28,6 +33,13 @@ pub fn chat_with_ai(
         db.inner(),
         message,
     )
+}
+
+/// The "New conversation" button — clears the in-memory transcript. Does
+/// not touch the DB-backed action log (see `AIChatOrchestrator::reset`).
+#[tauri::command]
+pub fn reset_ai_conversation(ai_state: State<AiState>) -> AppResult<()> {
+    ai_state.orchestrator.reset()
 }
 
 /// Probes a connection's reachability/auth before it's saved — draft

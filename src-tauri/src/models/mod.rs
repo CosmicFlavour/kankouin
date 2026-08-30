@@ -1,3 +1,4 @@
+pub mod ai_log;
 pub mod epic;
 pub mod project;
 pub mod settings;
@@ -6,6 +7,7 @@ pub mod task;
 pub mod user_story;
 pub mod workspace;
 
+pub use ai_log::AiActionLogEntry;
 pub use epic::Epic;
 pub use project::Project;
 pub use settings::{AIConnection, CloudSync, Settings};
