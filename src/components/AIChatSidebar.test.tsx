@@ -4,8 +4,20 @@ import userEvent from "@testing-library/user-event";
 import { AIChatSidebar } from "./AIChatSidebar";
 import { mockInvoke, mockCommands } from "@/test/tauriMock";
 
+function mockBackend(overrides: Record<string, () => unknown> = {}) {
+  mockCommands({
+    get_settings: () => ({
+      last_sync_file_path: null,
+      theme: null,
+      ai_connection: null,
+    }),
+    ...overrides,
+  });
+}
+
 describe("AIChatSidebar", () => {
   it("shows a placeholder when there are no messages yet", () => {
+    mockBackend();
     render(
       <AIChatSidebar
         open
@@ -22,7 +34,7 @@ describe("AIChatSidebar", () => {
 
   it("sends a message on button click and renders both sides of the exchange", async () => {
     const user = userEvent.setup();
-    mockCommands({ chat_with_ai: () => "Here's a plan." });
+    mockBackend({ chat_with_ai: () => "Here's a plan." });
     render(
       <AIChatSidebar
         open
@@ -48,7 +60,7 @@ describe("AIChatSidebar", () => {
 
   it("sends a message on Enter without Shift, but not with Shift", async () => {
     const user = userEvent.setup();
-    mockCommands({ chat_with_ai: () => "ok" });
+    mockBackend({ chat_with_ai: () => "ok" });
     render(
       <AIChatSidebar
         open
@@ -60,7 +72,10 @@ describe("AIChatSidebar", () => {
 
     const textarea = screen.getByPlaceholderText("Message the AI assistant…");
     await user.type(textarea, "Line one{Shift>}{Enter}{/Shift}Line two");
-    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "chat_with_ai",
+      expect.anything(),
+    );
 
     await user.type(textarea, "{Enter}");
     expect(mockInvoke).toHaveBeenCalledWith(
@@ -71,7 +86,7 @@ describe("AIChatSidebar", () => {
 
   it("calls onMutation after a successful reply", async () => {
     const user = userEvent.setup();
-    mockCommands({ chat_with_ai: () => "done" });
+    mockBackend({ chat_with_ai: () => "done" });
     let mutated = false;
     render(
       <AIChatSidebar
@@ -96,7 +111,7 @@ describe("AIChatSidebar", () => {
 
   it("shows an error when the backend call fails", async () => {
     const user = userEvent.setup();
-    mockCommands({
+    mockBackend({
       chat_with_ai: () => {
         throw new Error("ai backend unavailable");
       },

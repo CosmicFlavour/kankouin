@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { SendIcon } from "lucide-react";
+import { SendIcon, SettingsIcon } from "lucide-react";
 import { useAIChat } from "@/hooks/useAIChat";
+import { useSettings } from "@/hooks/useSettings";
+import { AIConnectionDialog } from "@/components/AIConnectionDialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -26,6 +28,7 @@ export function AIChatSidebar({
     workspaceId,
     onMutation,
   );
+  const { settings, setAiConnection, clearAiConnection } = useSettings();
   const [draft, setDraft] = useState("");
 
   async function handleSend() {
@@ -50,7 +53,20 @@ export function AIChatSidebar({
       )}
     >
       <div className="flex min-w-96 flex-1 flex-col gap-3 p-4">
-        <h2 className="text-sm font-semibold">AI Assistant</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">AI Assistant</h2>
+          <AIConnectionDialog
+            trigger={
+              <Button type="button" variant="ghost" size="icon-sm">
+                <SettingsIcon />
+                <span className="sr-only">AI connection settings</span>
+              </Button>
+            }
+            connection={settings.ai_connection}
+            onSave={setAiConnection}
+            onClear={clearAiConnection}
+          />
+        </div>
 
         <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
           {messages.length === 0 && (

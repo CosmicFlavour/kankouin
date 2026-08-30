@@ -1,15 +1,24 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+export interface AIConnection {
+  provider: string;
+  base_url: string;
+  api_key: string;
+  model: string;
+}
+
 export interface Settings {
   last_sync_file_path: string | null;
   theme: string | null;
+  ai_connection: AIConnection | null;
 }
 
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>({
     last_sync_file_path: null,
     theme: null,
+    ai_connection: null,
   });
 
   useEffect(() => {
@@ -46,5 +55,31 @@ export function useSettings() {
     setSettings(updated);
   }
 
-  return { settings, setLastSyncFilePath, setTheme };
+  async function setAiConnection(
+    provider: string,
+    baseUrl: string,
+    apiKey: string,
+    model: string,
+  ) {
+    const updated = await invoke<Settings>("set_ai_connection", {
+      provider,
+      baseUrl,
+      apiKey,
+      model,
+    });
+    setSettings(updated);
+  }
+
+  async function clearAiConnection() {
+    const updated = await invoke<Settings>("clear_ai_connection");
+    setSettings(updated);
+  }
+
+  return {
+    settings,
+    setLastSyncFilePath,
+    setTheme,
+    setAiConnection,
+    clearAiConnection,
+  };
 }

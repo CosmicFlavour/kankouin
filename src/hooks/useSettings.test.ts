@@ -35,6 +35,7 @@ describe("useSettings", () => {
     expect(result.current.settings).toEqual({
       last_sync_file_path: null,
       theme: null,
+      ai_connection: null,
     });
   });
 
@@ -100,5 +101,79 @@ describe("useSettings", () => {
     expect(mockInvoke).toHaveBeenCalledWith("set_last_sync_file_path", {
       path: "/data/kankouin.enc",
     });
+  });
+
+  it("setAiConnection updates settings", async () => {
+    const connection = {
+      provider: "openwebui",
+      base_url: "https://openwebui.example.com",
+      api_key: "sk-test",
+      model: "sonnet-5",
+    };
+    mockCommands({
+      get_settings: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_connection: null,
+      }),
+      set_ai_connection: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_connection: connection,
+      }),
+    });
+
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.settings.theme).toBe(null));
+
+    await act(async () => {
+      await result.current.setAiConnection(
+        "openwebui",
+        "https://openwebui.example.com",
+        "sk-test",
+        "sonnet-5",
+      );
+    });
+
+    expect(result.current.settings.ai_connection).toEqual(connection);
+    expect(mockInvoke).toHaveBeenCalledWith("set_ai_connection", {
+      provider: "openwebui",
+      baseUrl: "https://openwebui.example.com",
+      apiKey: "sk-test",
+      model: "sonnet-5",
+    });
+  });
+
+  it("clearAiConnection updates settings", async () => {
+    const connection = {
+      provider: "openwebui",
+      base_url: "https://openwebui.example.com",
+      api_key: "sk-test",
+      model: "sonnet-5",
+    };
+    mockCommands({
+      get_settings: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_connection: connection,
+      }),
+      clear_ai_connection: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_connection: null,
+      }),
+    });
+
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() =>
+      expect(result.current.settings.ai_connection).toEqual(connection),
+    );
+
+    await act(async () => {
+      await result.current.clearAiConnection();
+    });
+
+    expect(result.current.settings.ai_connection).toBeNull();
+    expect(mockInvoke).toHaveBeenCalledWith("clear_ai_connection");
   });
 });
