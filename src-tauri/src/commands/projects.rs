@@ -19,7 +19,7 @@ fn row_to_project(row: &rusqlite::Row) -> rusqlite::Result<Project> {
     })
 }
 
-fn list(conn: &Connection, workspace_id: String) -> AppResult<Vec<Project>> {
+pub(crate) fn list(conn: &Connection, workspace_id: String) -> AppResult<Vec<Project>> {
     let mut stmt = conn.prepare(
         "SELECT id, workspace_id, name, description, archived, created_at, updated_at
          FROM projects WHERE workspace_id = ?1 AND archived = 0 ORDER BY created_at ASC",

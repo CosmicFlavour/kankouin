@@ -1,8 +1,11 @@
 use std::sync::Mutex;
 
+use crate::db::AppState;
 use crate::error::{AppError, AppResult};
 
-use super::{AIProvider, AIResponse, ChatMessage, ChatRole, ToolDefinition, ToolExecutor};
+use super::{
+    AIProvider, AIResponse, ChatMessage, ChatRole, ToolContext, ToolDefinition, ToolExecutor,
+};
 
 /// Guards against a misbehaving (or malicious) provider that always
 /// requests another tool call — without this, `send_message` would loop
@@ -23,11 +26,14 @@ impl AIChatOrchestrator {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn send_message(
         &self,
         provider: &dyn AIProvider,
         executor: &dyn ToolExecutor,
         tools: &[ToolDefinition],
+        ctx: &ToolContext,
+        db: &AppState,
         user_message: String,
     ) -> AppResult<String> {
         let mut history = self.history.lock().map_err(|_| AppError::Lock)?;
@@ -48,7 +54,7 @@ impl AIChatOrchestrator {
                 }
                 AIResponse::ToolCalls(calls) => {
                     for call in calls {
-                        let result = executor.execute(&call)?;
+                        let result = executor.execute(&call, ctx, db)?;
                         history.push(ChatMessage {
                             role: ChatRole::Tool,
                             content: result.to_string(),
@@ -75,16 +81,26 @@ mod tests {
     use super::*;
     use crate::ai::mock::{MockAIProvider, MockToolExecutor};
     use crate::ai::ToolCall;
+    use crate::db::{self, DbStatus};
     use serde_json::json;
+
+    fn test_db() -> AppState {
+        AppState {
+            db: Mutex::new(db::test_connection()),
+            db_status: Mutex::new(DbStatus::NotConfigured),
+        }
+    }
 
     #[test]
     fn plain_message_round_trip_echoes_and_records_history() {
         let orchestrator = AIChatOrchestrator::new();
         let provider = MockAIProvider;
         let executor = MockToolExecutor;
+        let ctx = ToolContext::default();
+        let db = test_db();
 
         let reply = orchestrator
-            .send_message(&provider, &executor, &[], "hello".to_string())
+            .send_message(&provider, &executor, &[], &ctx, &db, "hello".to_string())
             .unwrap();
 
         assert_eq!(reply, "Mock echo: hello");
@@ -96,9 +112,18 @@ mod tests {
         let orchestrator = AIChatOrchestrator::new();
         let provider = MockAIProvider;
         let executor = MockToolExecutor;
+        let ctx = ToolContext::default();
+        let db = test_db();
 
         let reply = orchestrator
-            .send_message(&provider, &executor, &[], "trigger_tool".to_string())
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx,
+                &db,
+                "trigger_tool".to_string(),
+            )
             .unwrap();
 
         assert_eq!(reply, "Final response after tool");
@@ -135,9 +160,11 @@ mod tests {
         let orchestrator = AIChatOrchestrator::new();
         let provider = AlwaysToolCallsProvider;
         let executor = MockToolExecutor;
+        let ctx = ToolContext::default();
+        let db = test_db();
 
         let err = orchestrator
-            .send_message(&provider, &executor, &[], "go".to_string())
+            .send_message(&provider, &executor, &[], &ctx, &db, "go".to_string())
             .unwrap_err();
 
         assert!(matches!(err, AppError::Invalid(_)));

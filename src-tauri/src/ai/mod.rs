@@ -1,8 +1,10 @@
 pub mod mock;
 pub mod orchestrator;
+pub mod registry;
 
 use serde::{Deserialize, Serialize};
 
+use crate::db::AppState;
 use crate::error::AppResult;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,10 +21,8 @@ pub struct ChatMessage {
     pub content: String,
 }
 
-/// JSON-schema description of a callable tool. Unused (callers pass an
-/// empty slice) until the Phase 2 tool registry populates it from the real
-/// toolbox — the shape is defined now so `AIProvider::send` doesn't need to
-/// change signature when that lands.
+/// JSON-schema description of a callable tool, as understood by
+/// `AIProvider::send` and populated for real by `registry::toolbox`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {
     pub name: String,
@@ -56,11 +56,27 @@ pub trait AIProvider: Send + Sync {
     fn send(&self, messages: &[ChatMessage], tools: &[ToolDefinition]) -> AppResult<AIResponse>;
 }
 
-/// Executes a single tool call and returns its result. Stands in for the
-/// Phase 2 `ToolRegistry`, which will map calls onto real Tauri commands
-/// (`create_task`, `add_subtask`, etc.) instead of the mock's canned tool.
+/// Frontend-supplied context (e.g. the project currently open in the UI)
+/// that gets injected into a tool call's arguments automatically when the
+/// AI omits them — so it doesn't need to be told, or guess, `project_id`
+/// for a request that's implicitly "in the task the user is looking at".
+#[derive(Debug, Clone, Default)]
+pub struct ToolContext {
+    pub project_id: Option<String>,
+    pub workspace_id: Option<String>,
+}
+
+/// Executes a single tool call and returns its result. `registry` is the
+/// real implementation, mapping calls onto the same command functions
+/// `src-tauri/src/commands` exposes over Tauri's IPC; `mock` is a canned
+/// stand-in used to test the orchestrator loop in isolation.
 pub trait ToolExecutor: Send + Sync {
-    fn execute(&self, call: &ToolCall) -> AppResult<serde_json::Value>;
+    fn execute(
+        &self,
+        call: &ToolCall,
+        ctx: &ToolContext,
+        db: &AppState,
+    ) -> AppResult<serde_json::Value>;
 }
 
 /// Managed Tauri state for the AI chat feature. Kept separate from
@@ -76,7 +92,7 @@ impl AiState {
         Self {
             orchestrator: orchestrator::AIChatOrchestrator::new(),
             provider: Box::new(mock::MockAIProvider),
-            executor: Box::new(mock::MockToolExecutor),
+            executor: Box::new(registry::CommandToolExecutor),
         }
     }
 }

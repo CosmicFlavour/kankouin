@@ -173,7 +173,7 @@ fn fetch_blocked_task_ids(conn: &Connection, task_ids: &[String]) -> AppResult<H
     Ok(rows.collect::<Result<HashSet<_>, _>>()?)
 }
 
-fn list(conn: &Connection, project_id: String) -> AppResult<Vec<TaskSummary>> {
+pub(crate) fn list(conn: &Connection, project_id: String) -> AppResult<Vec<TaskSummary>> {
     let sql = format!(
         "SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = ?1 AND archived = 0 ORDER BY created_at ASC"
     );
@@ -225,7 +225,7 @@ pub(crate) fn list_all_active(conn: &Connection) -> AppResult<Vec<TaskSummary>> 
     attach_tags_and_blocked(conn, tasks)
 }
 
-fn get_detail(conn: &Connection, id: String) -> AppResult<TaskDetail> {
+pub(crate) fn get_detail(conn: &Connection, id: String) -> AppResult<TaskDetail> {
     let task = get_task_row(conn, &id)?;
 
     let mut subtask_stmt = conn.prepare(
@@ -321,7 +321,7 @@ pub(crate) fn create(
     })
 }
 
-fn update(
+pub(crate) fn update(
     conn: &Connection,
     id: String,
     title: Option<String>,
@@ -386,7 +386,7 @@ pub(crate) fn update_state(
     get_task_row(conn, &id)
 }
 
-fn apply_deadline(
+pub(crate) fn apply_deadline(
     conn: &Connection,
     id: String,
     deadline_type: String,
@@ -429,7 +429,7 @@ fn apply_deadline(
 /// this sets `epic_id`/`user_story_id` directly rather than via `COALESCE`,
 /// since the caller needs to be able to clear either field back to NULL
 /// (e.g. moving a task off a user story back onto the bare project).
-fn set_parent(
+pub(crate) fn set_parent(
     conn: &Connection,
     id: String,
     epic_id: Option<String>,
@@ -446,7 +446,7 @@ fn set_parent(
     get_task_row(conn, &id)
 }
 
-fn archive(conn: &Connection, id: String) -> AppResult<()> {
+pub(crate) fn archive(conn: &Connection, id: String) -> AppResult<()> {
     let now = Utc::now().to_rfc3339();
     let changed = conn.execute(
         "UPDATE tasks SET archived = 1, updated_at = ?2 WHERE id = ?1",
@@ -541,7 +541,11 @@ fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
     attach_tags_and_blocked(conn, tasks)
 }
 
-fn insert_subtask(conn: &Connection, task_id: String, title: String) -> AppResult<Subtask> {
+pub(crate) fn insert_subtask(
+    conn: &Connection,
+    task_id: String,
+    title: String,
+) -> AppResult<Subtask> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let sort_order: i64 = conn.query_row(

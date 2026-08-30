@@ -1,9 +1,11 @@
 use serde_json::json;
 
+use crate::db::AppState;
 use crate::error::{AppError, AppResult};
 
 use super::{
-    AIProvider, AIResponse, ChatMessage, ChatRole, ToolCall, ToolDefinition, ToolExecutor,
+    AIProvider, AIResponse, ChatMessage, ChatRole, ToolCall, ToolContext, ToolDefinition,
+    ToolExecutor,
 };
 
 /// Deterministic stand-in for a real AI backend, driven entirely by the
@@ -42,7 +44,12 @@ impl AIProvider for MockAIProvider {
 pub struct MockToolExecutor;
 
 impl ToolExecutor for MockToolExecutor {
-    fn execute(&self, call: &ToolCall) -> AppResult<serde_json::Value> {
+    fn execute(
+        &self,
+        call: &ToolCall,
+        _ctx: &ToolContext,
+        _db: &AppState,
+    ) -> AppResult<serde_json::Value> {
         match call.name.as_str() {
             "mock_tool" => Ok(json!({ "ok": true })),
             other => Err(AppError::Invalid(format!("unknown tool {other:?}"))),

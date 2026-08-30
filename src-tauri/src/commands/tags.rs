@@ -48,7 +48,7 @@ fn delete(conn: &Connection, id: String) -> AppResult<()> {
     Ok(())
 }
 
-fn replace_task_tags(
+pub(crate) fn replace_task_tags(
     conn: &mut Connection,
     task_id: String,
     tag_ids: Vec<String>,
