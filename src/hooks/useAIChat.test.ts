@@ -42,7 +42,32 @@ describe("useAIChat", () => {
     expect(result.current.messages).toEqual([]);
   });
 
-  it("surfaces a failure without appending an assistant message, and skips onMutation", async () => {
+  it("surfaces a failure without appending an assistant message", async () => {
+    mockCommands({
+      chat_with_ai: () => {
+        throw new Error("ai backend unavailable");
+      },
+    });
+    const { result } = renderHook(() => useAIChat("project-1", "workspace-1"));
+
+    await act(async () => {
+      await result.current.sendMessage("hello");
+    });
+
+    await waitFor(() =>
+      expect(result.current.error).toBe("Error: ai backend unavailable"),
+    );
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ role: "user", content: "hello" }),
+    ]);
+  });
+
+  // A tool call earlier in the same turn can have already mutated the db
+  // before a later step (another tool call, the follow-up provider call,
+  // the orchestrator's iteration cap) fails — so a failed turn is never
+  // proof nothing happened. onMutation must still fire so the board
+  // doesn't go stale relative to what the AI actually did.
+  it("still calls onMutation when the backend call fails", async () => {
     mockCommands({
       chat_with_ai: () => {
         throw new Error("ai backend unavailable");
@@ -57,13 +82,8 @@ describe("useAIChat", () => {
       await result.current.sendMessage("hello");
     });
 
-    await waitFor(() =>
-      expect(result.current.error).toBe("Error: ai backend unavailable"),
-    );
-    expect(result.current.messages).toEqual([
-      expect.objectContaining({ role: "user", content: "hello" }),
-    ]);
-    expect(onMutation).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    expect(onMutation).toHaveBeenCalledTimes(1);
   });
 
   it("calls onMutation exactly once after a successful reply", async () => {

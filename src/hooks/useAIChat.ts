@@ -13,11 +13,15 @@ function makeId() {
   return `msg-${nextId}`;
 }
 
-// `onMutation` fires on every successful reply, not just ones that actually
-// changed data — the backend doesn't report which tools (if any) a turn
-// invoked, so this is the simplest thing that's always correct. It's how
-// the task board (via App.tsx's aiRefreshSignal -> useTasks's refreshKey)
-// picks up AI-driven changes without a shared cache.
+// `onMutation` fires after every turn, success or failure — not just ones
+// that actually changed data, and not just ones that didn't error. The
+// backend doesn't report which tools (if any) a turn invoked, and a tool
+// call can mutate the db and then have a *later* step in the same turn
+// fail (a follow-up provider call, another tool call, the iteration cap —
+// see orchestrator.rs's send_message), so "it errored" is never proof
+// nothing happened. Always refetching is the simplest thing that's always
+// correct. It's how the task board (via App.tsx's aiRefreshSignal ->
+// useTasks's refreshKey) picks up AI-driven changes without a shared cache.
 export function useAIChat(
   projectId: string | null,
   workspaceId: string | null,
@@ -48,11 +52,11 @@ export function useAIChat(
         ...prev,
         { id: makeId(), role: "assistant", content: reply },
       ]);
-      onMutation?.();
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
+      onMutation?.();
     }
   }
 
