@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +9,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { AIConnection } from "@/hooks/useSettings";
+import {
+  DEFAULT_AI_TIMEOUT_SECONDS,
+  type AIConnection,
+} from "@/hooks/useSettings";
 
 interface AIConnectionDialogProps {
   trigger: React.ReactNode;
@@ -18,8 +22,14 @@ interface AIConnectionDialogProps {
     baseUrl: string,
     apiKey: string,
     model: string,
+    timeoutSeconds: number,
   ) => Promise<unknown>;
   onClear: () => Promise<unknown>;
+}
+
+interface TestResult {
+  model_found: boolean;
+  available_models: string[];
 }
 
 // Only OpenWebUI is supported today, so "provider" is a fixed label rather
@@ -35,8 +45,13 @@ export function AIConnectionDialog({
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
+  const [timeoutSeconds, setTimeoutSeconds] = useState(
+    String(DEFAULT_AI_TIMEOUT_SECONDS),
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
 
   // Re-seed the form from the current connection each time the dialog
   // opens, rather than keeping local draft state that could go stale.
@@ -45,20 +60,61 @@ export function AIConnectionDialog({
     setBaseUrl(connection?.base_url ?? "");
     setApiKey(connection?.api_key ?? "");
     setModel(connection?.model ?? "");
+    setTimeoutSeconds(
+      String(connection?.timeout_seconds ?? DEFAULT_AI_TIMEOUT_SECONDS),
+    );
     setError(null);
+    setTestResult(null);
   }, [open, connection]);
+
+  // A previous test result stops being trustworthy the moment any of the
+  // fields it was based on changes.
+  function updateField(setter: (value: string) => void) {
+    return (value: string) => {
+      setter(value);
+      setTestResult(null);
+    };
+  }
+
+  function parsedTimeout(): number | null {
+    const parsed = Number(timeoutSeconds);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!baseUrl.trim() || !model.trim()) return;
+    const timeout = parsedTimeout();
+    if (!baseUrl.trim() || !model.trim() || timeout === null) return;
     setBusy(true);
     try {
-      await onSave("openwebui", baseUrl.trim(), apiKey.trim(), model.trim());
+      await onSave("openwebui", baseUrl.trim(), apiKey.trim(), model.trim(), timeout);
       setOpen(false);
     } catch (err) {
       setError(String(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleTest() {
+    const timeout = parsedTimeout();
+    if (!baseUrl.trim() || !model.trim() || timeout === null) return;
+    setTesting(true);
+    setTestResult(null);
+    setError(null);
+    try {
+      const result = await invoke<TestResult>("test_ai_connection", {
+        provider: "openwebui",
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
+        model: model.trim(),
+        timeoutSeconds: timeout,
+      });
+      setTestResult(result);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -86,20 +142,51 @@ export function AIConnectionDialog({
           <Input
             autoFocus
             value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
+            onChange={(e) => updateField(setBaseUrl)(e.target.value)}
             placeholder="Base URL (e.g. https://openwebui.yourcompany.internal)"
           />
           <Input
             type="password"
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={(e) => updateField(setApiKey)(e.target.value)}
             placeholder="API key"
           />
           <Input
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => updateField(setModel)(e.target.value)}
             placeholder="Model (e.g. sonnet-5)"
           />
+          <Input
+            type="number"
+            min={1}
+            max={600}
+            value={timeoutSeconds}
+            onChange={(e) => updateField(setTimeoutSeconds)(e.target.value)}
+            placeholder="Request timeout (seconds)"
+          />
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleTest}
+            disabled={testing || busy}
+          >
+            {testing ? "Testing…" : "Test connection"}
+          </Button>
+          {testResult &&
+            (testResult.model_found ? (
+              <p className="text-sm text-green-700 dark:text-green-400">
+                Connected — model "{model.trim()}" is available.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Connected, but "{model.trim()}" wasn't found.{" "}
+                {testResult.available_models.length > 0
+                  ? `Available models: ${testResult.available_models.join(", ")}`
+                  : "No models were returned."}
+              </p>
+            ))}
+
           <Button type="submit" disabled={busy}>
             Save
           </Button>

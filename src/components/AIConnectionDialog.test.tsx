@@ -2,12 +2,14 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AIConnectionDialog } from "./AIConnectionDialog";
+import { mockInvoke, mockCommands } from "@/test/tauriMock";
 
 const connection = {
   provider: "openwebui",
   base_url: "https://openwebui.example.com",
   api_key: "sk-test",
   model: "sonnet-5",
+  timeout_seconds: 90,
 };
 
 function renderDialog(
@@ -36,7 +38,7 @@ async function openDialog(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("AIConnectionDialog", () => {
-  it("saves a new connection with the fixed openwebui provider", async () => {
+  it("saves a new connection with the fixed openwebui provider and default timeout", async () => {
     const { user, onSave } = renderDialog();
     await openDialog(user);
 
@@ -53,7 +55,42 @@ describe("AIConnectionDialog", () => {
       "https://openwebui.example.com",
       "sk-test",
       "sonnet-5",
+      120,
     );
+  });
+
+  it("saves with a custom timeout", async () => {
+    const { user, onSave } = renderDialog();
+    await openDialog(user);
+
+    await user.type(screen.getByPlaceholderText(/base url/i), "https://x.com");
+    await user.type(screen.getByPlaceholderText(/model/i), "model");
+    const timeoutInput = screen.getByPlaceholderText(/timeout/i);
+    await user.clear(timeoutInput);
+    await user.type(timeoutInput, "45");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      "openwebui",
+      "https://x.com",
+      "",
+      "model",
+      45,
+    );
+  });
+
+  it("does not submit with a zero or blank timeout", async () => {
+    const { user, onSave } = renderDialog();
+    await openDialog(user);
+
+    await user.type(screen.getByPlaceholderText(/base url/i), "https://x.com");
+    await user.type(screen.getByPlaceholderText(/model/i), "model");
+    const timeoutInput = screen.getByPlaceholderText(/timeout/i);
+    await user.clear(timeoutInput);
+    await user.type(timeoutInput, "0");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it("pre-fills the form from the existing connection when opened", async () => {
@@ -68,6 +105,9 @@ describe("AIConnectionDialog", () => {
     );
     expect(screen.getByPlaceholderText(/model/i)).toHaveValue(
       connection.model,
+    );
+    expect(screen.getByPlaceholderText(/timeout/i)).toHaveValue(
+      connection.timeout_seconds,
     );
   });
 
@@ -108,5 +148,77 @@ describe("AIConnectionDialog", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("tests the connection and reports a matching model", async () => {
+    mockCommands({
+      test_ai_connection: () => ({
+        model_found: true,
+        available_models: ["sonnet-5", "llama3.1:70b"],
+      }),
+    });
+    const { user } = renderDialog({ connection });
+    await openDialog(user);
+
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(
+      await screen.findByText('Connected — model "sonnet-5" is available.'),
+    ).toBeInTheDocument();
+    expect(mockInvoke).toHaveBeenCalledWith("test_ai_connection", {
+      provider: "openwebui",
+      baseUrl: connection.base_url,
+      apiKey: connection.api_key,
+      model: connection.model,
+      timeoutSeconds: connection.timeout_seconds,
+    });
+  });
+
+  it("tests the connection and reports a missing model", async () => {
+    mockCommands({
+      test_ai_connection: () => ({
+        model_found: false,
+        available_models: ["llama3.1:70b"],
+      }),
+    });
+    const { user } = renderDialog({ connection });
+    await openDialog(user);
+
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(
+      await screen.findByText(/wasn't found.*llama3\.1:70b/),
+    ).toBeInTheDocument();
+  });
+
+  it("clears a stale test result once a field changes", async () => {
+    mockCommands({
+      test_ai_connection: () => ({ model_found: true, available_models: [] }),
+    });
+    const { user } = renderDialog({ connection });
+    await openDialog(user);
+
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    await screen.findByText(/is available/);
+
+    await user.type(screen.getByPlaceholderText(/model/i), "-changed");
+
+    expect(screen.queryByText(/is available/)).not.toBeInTheDocument();
+  });
+
+  it("shows an error when the connection test fails", async () => {
+    mockCommands({
+      test_ai_connection: () => {
+        throw new Error("connection refused");
+      },
+    });
+    const { user } = renderDialog({ connection });
+    await openDialog(user);
+
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(
+      await screen.findByText("Error: connection refused"),
+    ).toBeInTheDocument();
   });
 });

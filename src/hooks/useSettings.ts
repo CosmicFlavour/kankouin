@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+export const DEFAULT_AI_TIMEOUT_SECONDS = 120;
+
 export interface AIConnection {
   provider: string;
   base_url: string;
   api_key: string;
   model: string;
+  timeout_seconds: number;
 }
 
 export interface Settings {
@@ -60,12 +63,14 @@ export function useSettings() {
     baseUrl: string,
     apiKey: string,
     model: string,
+    timeoutSeconds: number,
   ) {
     const updated = await invoke<Settings>("set_ai_connection", {
       provider,
       baseUrl,
       apiKey,
       model,
+      timeoutSeconds,
     });
     setSettings(updated);
   }

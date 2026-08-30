@@ -109,6 +109,7 @@ describe("useSettings", () => {
       base_url: "https://openwebui.example.com",
       api_key: "sk-test",
       model: "sonnet-5",
+      timeout_seconds: 90,
     };
     mockCommands({
       get_settings: () => ({
@@ -132,6 +133,7 @@ describe("useSettings", () => {
         "https://openwebui.example.com",
         "sk-test",
         "sonnet-5",
+        90,
       );
     });
 
@@ -141,6 +143,7 @@ describe("useSettings", () => {
       baseUrl: "https://openwebui.example.com",
       apiKey: "sk-test",
       model: "sonnet-5",
+      timeoutSeconds: 90,
     });
   });
 
