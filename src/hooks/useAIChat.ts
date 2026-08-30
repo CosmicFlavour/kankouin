@@ -1,10 +1,25 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+export interface AiActionLogEntry {
+  id: string;
+  tool_name: string;
+  summary: string;
+  task_id: string | null;
+  revertible: boolean;
+  reverted_at: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  actions?: AiActionLogEntry[];
+}
+
+interface ChatTurnResult {
+  reply: string;
+  actions: AiActionLogEntry[];
 }
 
 let nextId = 0;
@@ -25,6 +40,8 @@ function makeId() {
 export function useAIChat(
   projectId: string | null,
   workspaceId: string | null,
+  projectName: string | null,
+  workspaceName: string | null,
   onMutation?: () => void,
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -43,14 +60,21 @@ export function useAIChat(
     setError(null);
 
     try {
-      const reply = await invoke<string>("chat_with_ai", {
+      const result = await invoke<ChatTurnResult>("chat_with_ai", {
         message: trimmed,
         projectId,
         workspaceId,
+        projectName,
+        workspaceName,
       });
       setMessages((prev) => [
         ...prev,
-        { id: makeId(), role: "assistant", content: reply },
+        {
+          id: makeId(),
+          role: "assistant",
+          content: result.reply,
+          actions: result.actions,
+        },
       ]);
     } catch (err) {
       setError(String(err));
@@ -60,5 +84,46 @@ export function useAIChat(
     }
   }
 
-  return { messages, sendMessage, loading, error };
+  // The "New conversation" button. Only clears the local transcript and
+  // the backend's in-memory history — the DB-backed action log (and thus
+  // revert-ability) is untouched, see reset_ai_conversation.
+  async function resetConversation() {
+    try {
+      await invoke("reset_ai_conversation");
+      setMessages([]);
+      setError(null);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  async function revertAction(actionId: string) {
+    try {
+      await invoke("revert_ai_action", { id: actionId });
+      // Flip the button off immediately rather than waiting on a refetch
+      // that doesn't exist for the action log — the exact timestamp value
+      // doesn't matter, only that it's now truthy.
+      const revertedAt = new Date().toISOString();
+      setMessages((prev) =>
+        prev.map((m) => ({
+          ...m,
+          actions: m.actions?.map((a) =>
+            a.id === actionId ? { ...a, reverted_at: revertedAt } : a,
+          ),
+        })),
+      );
+      onMutation?.();
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  return {
+    messages,
+    sendMessage,
+    loading,
+    error,
+    resetConversation,
+    revertAction,
+  };
 }

@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { SendIcon, SettingsIcon } from "lucide-react";
-import { useAIChat } from "@/hooks/useAIChat";
+import { Fragment, useState } from "react";
+import { PlusIcon, SendIcon, SettingsIcon } from "lucide-react";
+import { useAIChat, type AiActionLogEntry } from "@/hooks/useAIChat";
 import { useSettings } from "@/hooks/useSettings";
 import { AIConnectionDialog } from "@/components/AIConnectionDialog";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,52 @@ interface AIChatSidebarProps {
   open: boolean;
   projectId: string | null;
   workspaceId: string | null;
+  projectName: string | null;
+  workspaceName: string | null;
   onMutation: () => void;
+}
+
+function ActionsTrail({
+  actions,
+  onRevert,
+}: {
+  actions: AiActionLogEntry[];
+  onRevert: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="w-full max-w-[85%] self-start text-xs text-muted-foreground">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+      >
+        {actions.length} action{actions.length === 1 ? "" : "s"} taken
+      </button>
+      {expanded && (
+        <ul className="mt-1 flex flex-col gap-1">
+          {actions.map((action) => (
+            <li key={action.id} className="flex items-center justify-between gap-2">
+              <span className={action.reverted_at ? "line-through" : undefined}>
+                {action.summary}
+              </span>
+              {action.revertible && !action.reverted_at && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => onRevert(action.id)}
+                >
+                  Revert
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 // Kept mounted (width-collapsed, not conditionally rendered) so the
@@ -21,13 +66,18 @@ export function AIChatSidebar({
   open,
   projectId,
   workspaceId,
+  projectName,
+  workspaceName,
   onMutation,
 }: AIChatSidebarProps) {
-  const { messages, sendMessage, loading, error } = useAIChat(
-    projectId,
-    workspaceId,
-    onMutation,
-  );
+  const {
+    messages,
+    sendMessage,
+    loading,
+    error,
+    resetConversation,
+    revertAction,
+  } = useAIChat(projectId, workspaceId, projectName, workspaceName, onMutation);
   const { settings, setAiConnection, clearAiConnection } = useSettings();
   const [draft, setDraft] = useState("");
 
@@ -55,17 +105,29 @@ export function AIChatSidebar({
       <div className="flex min-w-96 flex-1 flex-col gap-3 p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">AI Assistant</h2>
-          <AIConnectionDialog
-            trigger={
-              <Button type="button" variant="ghost" size="icon-sm">
-                <SettingsIcon />
-                <span className="sr-only">AI connection settings</span>
-              </Button>
-            }
-            connection={settings.ai_connection}
-            onSave={setAiConnection}
-            onClear={clearAiConnection}
-          />
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={resetConversation}
+              title="New conversation"
+            >
+              <PlusIcon />
+              <span className="sr-only">New conversation</span>
+            </Button>
+            <AIConnectionDialog
+              trigger={
+                <Button type="button" variant="ghost" size="icon-sm">
+                  <SettingsIcon />
+                  <span className="sr-only">AI connection settings</span>
+                </Button>
+              }
+              connection={settings.ai_connection}
+              onSave={setAiConnection}
+              onClear={clearAiConnection}
+            />
+          </div>
         </div>
 
         <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
@@ -76,17 +138,23 @@ export function AIChatSidebar({
             </p>
           )}
           {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
-                message.role === "user"
-                  ? "self-end bg-primary text-primary-foreground"
-                  : "self-start bg-muted text-foreground",
-              )}
-            >
-              {message.content}
-            </div>
+            <Fragment key={message.id}>
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
+                  message.role === "user"
+                    ? "self-end bg-primary text-primary-foreground"
+                    : "self-start bg-muted text-foreground",
+                )}
+              >
+                {message.content}
+              </div>
+              {message.role === "assistant" &&
+                message.actions &&
+                message.actions.length > 0 && (
+                  <ActionsTrail actions={message.actions} onRevert={revertAction} />
+                )}
+            </Fragment>
           ))}
           {loading && (
             <p className="self-start text-sm text-muted-foreground">

@@ -276,6 +276,10 @@ function App() {
         open={aiSidebarOpen}
         projectId={selectedProjectId}
         workspaceId={selectedWorkspaceId}
+        projectName={
+          allProjects.find((p) => p.id === selectedProjectId)?.name ?? null
+        }
+        workspaceName={selectedWorkspace?.name ?? null}
         onMutation={() => setAiRefreshSignal((v) => v + 1)}
       />
 

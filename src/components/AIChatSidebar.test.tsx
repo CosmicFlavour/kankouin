@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AIChatSidebar } from "./AIChatSidebar";
@@ -15,17 +15,28 @@ function mockBackend(overrides: Record<string, () => unknown> = {}) {
   });
 }
 
+function renderSidebar(
+  overrides: Partial<Parameters<typeof AIChatSidebar>[0]> = {},
+) {
+  const onMutation = vi.fn();
+  render(
+    <AIChatSidebar
+      open
+      projectId="project-1"
+      workspaceId="workspace-1"
+      projectName="Website Redesign"
+      workspaceName="Personal"
+      onMutation={onMutation}
+      {...overrides}
+    />,
+  );
+  return { onMutation };
+}
+
 describe("AIChatSidebar", () => {
   it("shows a placeholder when there are no messages yet", () => {
     mockBackend();
-    render(
-      <AIChatSidebar
-        open
-        projectId="project-1"
-        workspaceId="workspace-1"
-        onMutation={() => {}}
-      />,
-    );
+    renderSidebar();
 
     expect(
       screen.getByText(/ask me to break a task down/i),
@@ -34,15 +45,10 @@ describe("AIChatSidebar", () => {
 
   it("sends a message on button click and renders both sides of the exchange", async () => {
     const user = userEvent.setup();
-    mockBackend({ chat_with_ai: () => "Here's a plan." });
-    render(
-      <AIChatSidebar
-        open
-        projectId="project-1"
-        workspaceId="workspace-1"
-        onMutation={() => {}}
-      />,
-    );
+    mockBackend({
+      chat_with_ai: () => ({ reply: "Here's a plan.", actions: [] }),
+    });
+    renderSidebar();
 
     const textarea = screen.getByPlaceholderText("Message the AI assistant…");
     await user.type(textarea, "Break this down");
@@ -55,20 +61,15 @@ describe("AIChatSidebar", () => {
       message: "Break this down",
       projectId: "project-1",
       workspaceId: "workspace-1",
+      projectName: "Website Redesign",
+      workspaceName: "Personal",
     });
   });
 
   it("sends a message on Enter without Shift, but not with Shift", async () => {
     const user = userEvent.setup();
-    mockBackend({ chat_with_ai: () => "ok" });
-    render(
-      <AIChatSidebar
-        open
-        projectId="project-1"
-        workspaceId="workspace-1"
-        onMutation={() => {}}
-      />,
-    );
+    mockBackend({ chat_with_ai: () => ({ reply: "ok", actions: [] }) });
+    renderSidebar();
 
     const textarea = screen.getByPlaceholderText("Message the AI assistant…");
     await user.type(textarea, "Line one{Shift>}{Enter}{/Shift}Line two");
@@ -86,18 +87,8 @@ describe("AIChatSidebar", () => {
 
   it("calls onMutation after a successful reply", async () => {
     const user = userEvent.setup();
-    mockBackend({ chat_with_ai: () => "done" });
-    let mutated = false;
-    render(
-      <AIChatSidebar
-        open
-        projectId="project-1"
-        workspaceId="workspace-1"
-        onMutation={() => {
-          mutated = true;
-        }}
-      />,
-    );
+    mockBackend({ chat_with_ai: () => ({ reply: "done", actions: [] }) });
+    const { onMutation } = renderSidebar();
 
     await user.type(
       screen.getByPlaceholderText("Message the AI assistant…"),
@@ -106,7 +97,7 @@ describe("AIChatSidebar", () => {
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     await screen.findByText("done");
-    expect(mutated).toBe(true);
+    expect(onMutation).toHaveBeenCalled();
   });
 
   it("shows an error when the backend call fails", async () => {
@@ -116,14 +107,7 @@ describe("AIChatSidebar", () => {
         throw new Error("ai backend unavailable");
       },
     });
-    render(
-      <AIChatSidebar
-        open
-        projectId="project-1"
-        workspaceId="workspace-1"
-        onMutation={() => {}}
-      />,
-    );
+    renderSidebar();
 
     await user.type(
       screen.getByPlaceholderText("Message the AI assistant…"),
@@ -134,5 +118,110 @@ describe("AIChatSidebar", () => {
     expect(
       await screen.findByText("Error: ai backend unavailable"),
     ).toBeInTheDocument();
+  });
+
+  it("clears the transcript when New conversation is clicked", async () => {
+    const user = userEvent.setup();
+    mockBackend({
+      chat_with_ai: () => ({ reply: "hi there", actions: [] }),
+      reset_ai_conversation: () => undefined,
+    });
+    renderSidebar();
+
+    await user.type(
+      screen.getByPlaceholderText("Message the AI assistant…"),
+      "hello",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("hi there");
+
+    await user.click(
+      screen.getByRole("button", { name: "New conversation" }),
+    );
+
+    expect(mockInvoke).toHaveBeenCalledWith("reset_ai_conversation");
+    expect(screen.queryByText("hi there")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/ask me to break a task down/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a collapsible action trail with a working revert button", async () => {
+    const user = userEvent.setup();
+    mockBackend({
+      chat_with_ai: () => ({
+        reply: "Archived it.",
+        actions: [
+          {
+            id: "log-1",
+            tool_name: "archive_task",
+            summary: 'Archived "Fix login bug"',
+            task_id: "task-1",
+            revertible: true,
+            reverted_at: null,
+          },
+        ],
+      }),
+      revert_ai_action: () => ({}),
+    });
+    const { onMutation } = renderSidebar();
+
+    await user.type(
+      screen.getByPlaceholderText("Message the AI assistant…"),
+      "archive it",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("Archived it.");
+    onMutation.mockClear();
+
+    // Collapsed by default.
+    expect(screen.queryByText('Archived "Fix login bug"')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "1 action taken" }));
+    expect(screen.getByText('Archived "Fix login bug"')).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Revert" }));
+
+    expect(mockInvoke).toHaveBeenCalledWith("revert_ai_action", {
+      id: "log-1",
+    });
+    expect(
+      screen.queryByRole("button", { name: "Revert" }),
+    ).not.toBeInTheDocument();
+    expect(onMutation).toHaveBeenCalled();
+  });
+
+  it("does not show a revert button for a non-revertible action", async () => {
+    const user = userEvent.setup();
+    mockBackend({
+      chat_with_ai: () => ({
+        reply: "Created it.",
+        actions: [
+          {
+            id: "log-1",
+            tool_name: "create_task",
+            summary: 'Created task "New"',
+            task_id: "task-1",
+            revertible: false,
+            reverted_at: null,
+          },
+        ],
+      }),
+    });
+    renderSidebar();
+
+    await user.type(
+      screen.getByPlaceholderText("Message the AI assistant…"),
+      "create a task",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("Created it.");
+
+    await user.click(screen.getByRole("button", { name: "1 action taken" }));
+
+    expect(screen.getByText('Created task "New"')).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Revert" }),
+    ).not.toBeInTheDocument();
   });
 });
