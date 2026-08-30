@@ -2,7 +2,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::commands::{projects, tags, tasks};
+use crate::commands::{epics, projects, tags, tasks, user_stories};
 use crate::db::AppState;
 use crate::error::{AppError, AppResult};
 
@@ -33,7 +33,8 @@ pub fn toolbox() -> Vec<ToolDefinition> {
         ToolDefinition {
             name: "set_task_parent".into(),
             description: "Moves a task under a different epic and/or user story, or clears \
-                either back to none."
+                either back to none. epic_id/user_story_id must be real IDs — call list_epics \
+                and/or list_user_stories first to find them, don't guess or invent one."
                 .into(),
             parameters: json!({
                 "type": "object",
@@ -48,7 +49,8 @@ pub fn toolbox() -> Vec<ToolDefinition> {
         ToolDefinition {
             name: "create_task".into(),
             description: "Creates a new task in a project. New tasks start in the \"todo\" \
-                state."
+                state. epic_id/user_story_id, if set, must be real IDs from list_epics/\
+                list_user_stories — don't guess or invent one."
                 .into(),
             parameters: json!({
                 "type": "object",
@@ -66,7 +68,8 @@ pub fn toolbox() -> Vec<ToolDefinition> {
         ToolDefinition {
             name: "update_task".into(),
             description: "Updates fields on an existing task. Omitted fields are left \
-                unchanged."
+                unchanged. epic_id/user_story_id, if set, must be real IDs from list_epics/\
+                list_user_stories — don't guess or invent one."
                 .into(),
             parameters: json!({
                 "type": "object",
@@ -143,8 +146,49 @@ pub fn toolbox() -> Vec<ToolDefinition> {
             }),
         },
         ToolDefinition {
+            name: "list_tags".into(),
+            description: "Lists every tag that exists (tags are global, not scoped to a \
+                project). Call this before set_task_tags to find the real tag IDs that match \
+                what the user asked for — never invent a tag ID."
+                .into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "list_epics".into(),
+            description: "Lists the epics in a project. Call this before set_task_parent, \
+                create_task, or update_task when the user refers to an epic by name, to find \
+                its real ID — never invent one."
+                .into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "project_id": { "type": "string", "description": "Defaults to the project currently open in the UI if omitted" }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "list_user_stories".into(),
+            description: "Lists the user stories in a project. Call this before \
+                set_task_parent, create_task, or update_task when the user refers to a user \
+                story by name, to find its real ID — never invent one."
+                .into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "project_id": { "type": "string", "description": "Defaults to the project currently open in the UI if omitted" }
+                },
+                "required": []
+            }),
+        },
+        ToolDefinition {
             name: "set_task_tags".into(),
-            description: "Replaces a task's full set of tags with the given list of tag IDs."
+            description: "Replaces a task's full set of tags with the given list of tag IDs. \
+                Call list_tags first to resolve tag names to real IDs — never invent one."
                 .into(),
             parameters: json!({
                 "type": "object",
@@ -232,6 +276,16 @@ struct GetTaskDetailsArgs {
 #[derive(Deserialize)]
 struct ListProjectsArgs {
     workspace_id: String,
+}
+
+#[derive(Deserialize)]
+struct ListEpicsArgs {
+    project_id: String,
+}
+
+#[derive(Deserialize)]
+struct ListUserStoriesArgs {
+    project_id: String,
 }
 
 #[derive(Deserialize)]
@@ -340,6 +394,15 @@ impl ToolExecutor for CommandToolExecutor {
                 let a: ListProjectsArgs = parse_args(args)?;
                 to_value(projects::list(&conn, a.workspace_id)?)
             }
+            "list_tags" => to_value(tags::list(&conn)?),
+            "list_epics" => {
+                let a: ListEpicsArgs = parse_args(args)?;
+                to_value(epics::list(&conn, a.project_id)?)
+            }
+            "list_user_stories" => {
+                let a: ListUserStoriesArgs = parse_args(args)?;
+                to_value(user_stories::list(&conn, a.project_id)?)
+            }
             "set_task_tags" => {
                 let a: SetTaskTagsArgs = parse_args(args)?;
                 tags::replace_task_tags(&mut conn, a.task_id, a.tag_ids)?;
@@ -447,6 +510,78 @@ mod tests {
             .unwrap();
         assert_eq!(result["title"], json!("Step 1"));
         assert_eq!(result["done"], json!(false));
+    }
+
+    #[test]
+    fn list_tags_returns_every_tag() {
+        let db = test_db();
+        let conn = db.conn().unwrap();
+        tags::create(&conn, "urgent".into(), "#ff0000".into()).unwrap();
+        drop(conn);
+
+        let executor = CommandToolExecutor;
+        let call = ToolCall {
+            id: "1".into(),
+            name: "list_tags".into(),
+            arguments: json!({}),
+        };
+
+        let result = executor
+            .execute(&call, &ToolContext::default(), &db)
+            .unwrap();
+        let names: Vec<&str> = result
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, vec!["urgent"]);
+    }
+
+    #[test]
+    fn list_epics_fills_in_project_id_from_context_when_omitted() {
+        let db = test_db();
+        let project_id = make_project(&db);
+        let conn = db.conn().unwrap();
+        epics::create(&conn, project_id.clone(), "Launch".into(), None).unwrap();
+        drop(conn);
+        let ctx = ToolContext {
+            project_id: Some(project_id),
+            workspace_id: None,
+        };
+
+        let executor = CommandToolExecutor;
+        let call = ToolCall {
+            id: "1".into(),
+            name: "list_epics".into(),
+            arguments: json!({}),
+        };
+
+        let result = executor.execute(&call, &ctx, &db).unwrap();
+        assert_eq!(result[0]["title"], json!("Launch"));
+    }
+
+    #[test]
+    fn list_user_stories_fills_in_project_id_from_context_when_omitted() {
+        let db = test_db();
+        let project_id = make_project(&db);
+        let conn = db.conn().unwrap();
+        user_stories::create(&conn, project_id.clone(), None, "As a user...".into(), None).unwrap();
+        drop(conn);
+        let ctx = ToolContext {
+            project_id: Some(project_id),
+            workspace_id: None,
+        };
+
+        let executor = CommandToolExecutor;
+        let call = ToolCall {
+            id: "1".into(),
+            name: "list_user_stories".into(),
+            arguments: json!({}),
+        };
+
+        let result = executor.execute(&call, &ctx, &db).unwrap();
+        assert_eq!(result[0]["title"], json!("As a user..."));
     }
 
     #[test]

@@ -19,7 +19,7 @@ fn row_to_user_story(row: &rusqlite::Row) -> rusqlite::Result<UserStory> {
     })
 }
 
-fn list(conn: &Connection, project_id: String) -> AppResult<Vec<UserStory>> {
+pub(crate) fn list(conn: &Connection, project_id: String) -> AppResult<Vec<UserStory>> {
     let mut stmt = conn.prepare(
         "SELECT id, project_id, epic_id, title, description, created_at, updated_at
          FROM user_stories WHERE project_id = ?1 ORDER BY created_at ASC",
