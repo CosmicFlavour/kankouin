@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod cloud;
 pub mod commands;
 mod dates;
@@ -5,6 +6,7 @@ pub mod db;
 pub mod error;
 mod models;
 
+use ai::AiState;
 use db::AppState;
 use std::sync::Mutex;
 use tauri::Manager;
@@ -20,9 +22,11 @@ pub fn run() {
                 db: Mutex::new(conn),
                 db_status: Mutex::new(status),
             });
+            app.manage(AiState::new());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::ai::chat_with_ai,
             commands::workspaces::list_workspaces,
             commands::workspaces::create_workspace,
             commands::workspaces::update_workspace,
