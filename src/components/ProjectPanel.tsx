@@ -14,12 +14,14 @@ import { toast } from "@/hooks/useToast";
 interface ProjectPanelProps {
   workspace: Workspace;
   projectId: string;
+  refreshKey?: unknown;
   onArchived?: () => void;
 }
 
 export function ProjectPanel({
   workspace,
   projectId,
+  refreshKey = null,
   onArchived,
 }: ProjectPanelProps) {
   const { projects, archiveProject } = useProjects(workspace.id);
@@ -113,6 +115,7 @@ export function ProjectPanel({
 
       <TaskBoard
         projectId={projectId}
+        refreshKey={refreshKey}
         scope={scope}
         onScopeChange={setScope}
         epics={epics}

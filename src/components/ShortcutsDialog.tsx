@@ -11,6 +11,7 @@ const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: "r", action: "Previous project (cycles across all workspaces)" },
   { keys: "o", action: "Go to Today / This Week view" },
   { keys: "s or /", action: "Go to Search view" },
+  { keys: "a", action: "Toggle the AI assistant sidebar" },
   { keys: "F1", action: "Show this shortcuts list" },
   { keys: "Ctrl+Q / Cmd+Q", action: "Quit the app" },
 ];
