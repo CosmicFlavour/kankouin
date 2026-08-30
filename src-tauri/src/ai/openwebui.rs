@@ -1,8 +1,19 @@
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, AppResult};
 
 use super::{AIProvider, AIResponse, ChatMessage, ChatRole, ToolCall, ToolDefinition};
+
+/// A stalled OpenWebUI instance (or a route to nowhere) must not hang a
+/// chat turn forever — the orchestrator can call `send` up to
+/// `orchestrator::MAX_ITERATIONS` times per turn, and there's no
+/// cancel button in the UI, so an unbounded request is an unbounded hang
+/// with the only recovery being an app restart. 120s is generous for a
+/// local model to actually finish generating, while still bounding the
+/// worst case.
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Talks to a self-hosted OpenWebUI instance over its OpenAI-compatible
 /// `/api/chat/completions` endpoint (bearer auth, `{model, messages, tools}`
@@ -13,14 +24,22 @@ pub struct OpenWebUIProvider {
     base_url: String,
     api_key: String,
     model: String,
+    timeout: Duration,
 }
 
 impl OpenWebUIProvider {
     pub fn new(base_url: String, api_key: String, model: String) -> Self {
+        Self::with_timeout(base_url, api_key, model, DEFAULT_TIMEOUT)
+    }
+
+    /// Split out from `new` so tests can use a short timeout instead of
+    /// waiting on the real (120s) default.
+    fn with_timeout(base_url: String, api_key: String, model: String, timeout: Duration) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             api_key,
             model,
+            timeout,
         }
     }
 }
@@ -199,6 +218,7 @@ impl AIProvider for OpenWebUIProvider {
         let response = ureq::post(&endpoint)
             .set("Authorization", &format!("Bearer {}", self.api_key))
             .set("Content-Type", "application/json")
+            .timeout(self.timeout)
             .send_json(request)
             .map_err(|e| {
                 AppError::Invalid(format!(
@@ -435,5 +455,43 @@ mod tests {
             message.contains("invalid API key"),
             "error message should include OpenWebUI's response body, got: {message}"
         );
+    }
+
+    /// Accepts the connection but never writes a response — simulates a
+    /// stalled OpenWebUI instance, which `send` must give up on instead of
+    /// hanging forever.
+    fn serve_and_hang() -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        thread::spawn(move || {
+            // Held for the thread's lifetime so the connection stays open
+            // (but silent) rather than being reset immediately.
+            let _stream = listener.accept().unwrap();
+            thread::sleep(std::time::Duration::from_secs(60));
+        });
+
+        format!("http://{addr}")
+    }
+
+    #[test]
+    fn send_times_out_instead_of_hanging_forever_on_a_stalled_server() {
+        let url = serve_and_hang();
+        let provider = OpenWebUIProvider::with_timeout(
+            url,
+            "key".into(),
+            "model".into(),
+            std::time::Duration::from_millis(200),
+        );
+
+        let start = std::time::Instant::now();
+        let err = provider.send(&[ChatMessage::user("hi")], &[]).unwrap_err();
+
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(5),
+            "send should give up around the configured timeout, took {:?}",
+            start.elapsed()
+        );
+        assert!(err.to_string().contains("OpenWebUI request failed"));
     }
 }
