@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { confirm } from "@/hooks/useConfirm";
 
 export interface AiActionLogEntry {
   id: string;
@@ -21,6 +22,10 @@ interface ChatTurnResult {
   reply: string;
   actions: AiActionLogEntry[];
 }
+
+type RevertOutcome =
+  | { status: "reverted"; task: unknown }
+  | { status: "needs_confirmation" };
 
 let nextId = 0;
 function makeId() {
@@ -97,9 +102,22 @@ export function useAIChat(
     }
   }
 
-  async function revertAction(actionId: string) {
+  async function revertAction(actionId: string, force = false) {
     try {
-      await invoke("revert_ai_action", { id: actionId });
+      const outcome = await invoke<RevertOutcome>("revert_ai_action", {
+        id: actionId,
+        force,
+      });
+
+      if (outcome.status === "needs_confirmation") {
+        const confirmed = await confirm(
+          "This task has been updated since this action was taken. Reverting will overwrite those later changes.",
+          { title: "Task changed since this action?", kind: "warning" },
+        );
+        if (confirmed) await revertAction(actionId, true);
+        return;
+      }
+
       // Flip the button off immediately rather than waiting on a refetch
       // that doesn't exist for the action log — the exact timestamp value
       // doesn't matter, only that it's now truthy.

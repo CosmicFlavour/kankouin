@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useAIChat } from "./useAIChat";
 import { mockInvoke, mockCommands } from "@/test/tauriMock";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { acceptConfirm, declineConfirm } from "@/test/confirmDialog";
 
 describe("useAIChat", () => {
   it("sends the message with project/workspace context and appends the reply", async () => {
@@ -170,7 +173,7 @@ describe("useAIChat", () => {
     ];
     mockCommands({
       chat_with_ai: () => ({ reply: "Done.", actions }),
-      revert_ai_action: () => ({}),
+      revert_ai_action: () => ({ status: "reverted", task: {} }),
     });
     const onMutation = vi.fn();
     const { result } = renderHook(() =>
@@ -186,7 +189,10 @@ describe("useAIChat", () => {
       await result.current.revertAction("log-1");
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith("revert_ai_action", { id: "log-1" });
+    expect(mockInvoke).toHaveBeenCalledWith("revert_ai_action", {
+      id: "log-1",
+      force: false,
+    });
     expect(result.current.messages[1].actions?.[0].reverted_at).not.toBeNull();
     expect(onMutation).toHaveBeenCalledTimes(1);
   });
@@ -206,5 +212,95 @@ describe("useAIChat", () => {
     });
 
     expect(result.current.error).toBe("Error: already reverted");
+  });
+
+  it("shows a confirm dialog and retries with force when the task changed since the action", async () => {
+    const user = userEvent.setup();
+    render(<ConfirmDialog />);
+    const actions = [
+      {
+        id: "log-1",
+        tool_name: "archive_task",
+        summary: 'Archived "T"',
+        task_id: "task-1",
+        revertible: true,
+        reverted_at: null,
+      },
+    ];
+    mockCommands({
+      chat_with_ai: () => ({ reply: "Archived it.", actions }),
+      revert_ai_action: (args) =>
+        args?.force
+          ? { status: "reverted", task: {} }
+          : { status: "needs_confirmation" },
+    });
+    const onMutation = vi.fn();
+    const { result } = renderHook(() =>
+      useAIChat("project-1", "workspace-1", null, null, onMutation),
+    );
+    await act(async () => {
+      await result.current.sendMessage("archive it");
+    });
+    onMutation.mockClear();
+
+    let revertPromise!: Promise<void>;
+    act(() => {
+      revertPromise = result.current.revertAction("log-1");
+    });
+    await acceptConfirm(user);
+    await act(async () => {
+      await revertPromise;
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("revert_ai_action", {
+      id: "log-1",
+      force: false,
+    });
+    expect(mockInvoke).toHaveBeenCalledWith("revert_ai_action", {
+      id: "log-1",
+      force: true,
+    });
+    expect(result.current.messages[1].actions?.[0].reverted_at).not.toBeNull();
+    expect(onMutation).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not revert when the confirmation is declined", async () => {
+    const user = userEvent.setup();
+    render(<ConfirmDialog />);
+    const actions = [
+      {
+        id: "log-1",
+        tool_name: "archive_task",
+        summary: 'Archived "T"',
+        task_id: "task-1",
+        revertible: true,
+        reverted_at: null,
+      },
+    ];
+    mockCommands({
+      chat_with_ai: () => ({ reply: "Archived it.", actions }),
+      revert_ai_action: () => ({ status: "needs_confirmation" }),
+    });
+    const { result } = renderHook(() =>
+      useAIChat("project-1", "workspace-1", null, null),
+    );
+    await act(async () => {
+      await result.current.sendMessage("archive it");
+    });
+
+    let revertPromise!: Promise<void>;
+    act(() => {
+      revertPromise = result.current.revertAction("log-1");
+    });
+    await declineConfirm(user);
+    await act(async () => {
+      await revertPromise;
+    });
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "revert_ai_action",
+      expect.objectContaining({ force: true }),
+    );
+    expect(result.current.messages[1].actions?.[0].reverted_at).toBeNull();
   });
 });
