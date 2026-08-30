@@ -1,5 +1,6 @@
 use chrono::Utc;
 use rusqlite::{params, Connection};
+use serde::Serialize;
 use tauri::State;
 use uuid::Uuid;
 
@@ -46,16 +47,36 @@ pub(crate) fn record(
     })
 }
 
+/// What `revert` did. `NeedsConfirmation` isn't an error — it's a normal
+/// outcome the frontend turns into a confirm dialog ("this task changed
+/// since this action, reverting will overwrite that") before retrying
+/// with `force: true`.
+// One-off return value for a single button click, never stored in bulk —
+// boxing `Task` to shrink the enum isn't worth the extra indirection.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum RevertOutcome {
+    Reverted { task: Task },
+    NeedsConfirmation,
+}
+
 /// Restores the task to the state captured in `before_state` and marks
 /// the entry reverted. Errors if the entry doesn't exist, was never
 /// revertible (no `before_state` — e.g. `create_task`/`add_subtask`/
 /// `set_task_tags`), or was already reverted.
-pub(crate) fn revert(conn: &Connection, id: String) -> AppResult<Task> {
-    let (before_state, reverted_at): (Option<String>, Option<String>) = conn
+///
+/// Reverting is a blind "restore this snapshot" — if the task was edited
+/// *after* the tool call this entry logs (by the user, or anything else),
+/// applying the snapshot would silently discard that later edit. Unless
+/// `force` is set, that case returns `NeedsConfirmation` instead of
+/// reverting, so the caller can confirm with the user first.
+pub(crate) fn revert(conn: &Connection, id: String, force: bool) -> AppResult<RevertOutcome> {
+    let (before_state, reverted_at, created_at): (Option<String>, Option<String>, String) = conn
         .query_row(
-            "SELECT before_state, reverted_at FROM ai_action_log WHERE id = ?1",
+            "SELECT before_state, reverted_at, created_at FROM ai_action_log WHERE id = ?1",
             params![id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .map_err(|e| match e {
             rusqlite::Error::QueryReturnedNoRows => AppError::NotFound,
@@ -70,6 +91,16 @@ pub(crate) fn revert(conn: &Connection, id: String) -> AppResult<Task> {
     let task: Task = serde_json::from_str(&before_json)
         .map_err(|e| AppError::Invalid(format!("corrupted action log entry: {e}")))?;
 
+    if !force {
+        let current = tasks::get(conn, &task.id)?;
+        // RFC3339 timestamps compare correctly as plain strings — the
+        // same assumption `daily_review`'s stale-task query already
+        // relies on (`state_since <= ?1`).
+        if current.updated_at > created_at {
+            return Ok(RevertOutcome::NeedsConfirmation);
+        }
+    }
+
     let restored = tasks::restore_snapshot(conn, &task)?;
 
     let now = Utc::now().to_rfc3339();
@@ -78,13 +109,17 @@ pub(crate) fn revert(conn: &Connection, id: String) -> AppResult<Task> {
         params![id, now],
     )?;
 
-    Ok(restored)
+    Ok(RevertOutcome::Reverted { task: restored })
 }
 
 #[tauri::command]
-pub fn revert_ai_action(state: State<AppState>, id: String) -> AppResult<Task> {
+pub fn revert_ai_action(
+    state: State<AppState>,
+    id: String,
+    force: bool,
+) -> AppResult<RevertOutcome> {
     let conn = state.conn()?;
-    revert(&conn, id)
+    revert(&conn, id, force)
 }
 
 #[cfg(test)]
@@ -160,7 +195,11 @@ mod tests {
         .unwrap();
         assert!(entry.revertible);
 
-        let restored = revert(&conn, entry.id.clone()).unwrap();
+        let outcome = revert(&conn, entry.id.clone(), false).unwrap();
+        let restored = match outcome {
+            RevertOutcome::Reverted { task } => task,
+            RevertOutcome::NeedsConfirmation => panic!("expected the revert to proceed"),
+        };
         assert_eq!(restored.title, "Original title");
         assert_eq!(restored.priority, "low");
 
@@ -187,7 +226,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = revert(&conn, entry.id);
+        let result = revert(&conn, entry.id, false);
         assert!(matches!(result, Err(AppError::Invalid(_))));
     }
 
@@ -207,15 +246,67 @@ mod tests {
         )
         .unwrap();
 
-        revert(&conn, entry.id.clone()).unwrap();
-        let second = revert(&conn, entry.id);
+        revert(&conn, entry.id.clone(), false).unwrap();
+        let second = revert(&conn, entry.id, false);
         assert!(matches!(second, Err(AppError::Invalid(_))));
     }
 
     #[test]
     fn reverting_an_unknown_id_is_not_found() {
         let conn = test_connection();
-        let result = revert(&conn, "does-not-exist".into());
+        let result = revert(&conn, "does-not-exist".into(), false);
         assert!(matches!(result, Err(AppError::NotFound)));
+    }
+
+    #[test]
+    fn revert_needs_confirmation_when_the_task_changed_after_the_logged_action() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = tasks::create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        let before = tasks::get(&conn, &task.id).unwrap();
+        let entry = record(
+            &conn,
+            "archive_task",
+            &json!({ "id": task.id }),
+            "Archived \"T\"".into(),
+            Some(task.id.clone()),
+            Some(&before),
+        )
+        .unwrap();
+
+        // Something touches the task again after the logged action.
+        tasks::update(
+            &conn,
+            task.id.clone(),
+            Some("Renamed after the fact".into()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let outcome = revert(&conn, entry.id.clone(), false).unwrap();
+        assert!(matches!(outcome, RevertOutcome::NeedsConfirmation));
+
+        // Still not reverted — a NeedsConfirmation outcome must not have
+        // applied the snapshot or marked the entry reverted.
+        let current = tasks::get(&conn, &task.id).unwrap();
+        assert_eq!(current.title, "Renamed after the fact");
+        let reverted_at: Option<String> = conn
+            .query_row(
+                "SELECT reverted_at FROM ai_action_log WHERE id = ?1",
+                params![entry.id.clone()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(reverted_at, None);
+
+        // force: true proceeds anyway, overwriting the later edit.
+        let outcome = revert(&conn, entry.id, true).unwrap();
+        match outcome {
+            RevertOutcome::Reverted { task } => assert_eq!(task.title, "T"),
+            RevertOutcome::NeedsConfirmation => panic!("force should bypass the check"),
+        }
     }
 }
