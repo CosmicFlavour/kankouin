@@ -4,10 +4,11 @@ use std::path::Path;
 use tauri::{AppHandle, Manager};
 
 use crate::error::{AppError, AppResult};
-use crate::models::{CloudSync, Settings};
+use crate::models::{AIConnection, CloudSync, Settings};
 
 const FILE_NAME: &str = "settings.json";
 const VALID_THEMES: [&str; 2] = ["light", "dark"];
+const VALID_AI_PROVIDERS: [&str; 1] = ["openwebui"];
 
 /// Reads `settings.json` from `config_dir`. A missing file (first run) or a
 /// corrupted one both fall back to defaults rather than erroring — this is
@@ -64,6 +65,36 @@ pub fn clear_cloud_sync(config_dir: &Path) -> AppResult<Settings> {
     Ok(settings)
 }
 
+pub(crate) fn save_ai_connection(
+    config_dir: &Path,
+    connection: AIConnection,
+) -> AppResult<Settings> {
+    if !VALID_AI_PROVIDERS.contains(&connection.provider.as_str()) {
+        return Err(AppError::Invalid(format!(
+            "invalid AI provider {:?}, expected one of {VALID_AI_PROVIDERS:?}",
+            connection.provider
+        )));
+    }
+    if connection.base_url.trim().is_empty() {
+        return Err(AppError::Invalid("base_url must not be blank".into()));
+    }
+    if connection.model.trim().is_empty() {
+        return Err(AppError::Invalid("model must not be blank".into()));
+    }
+
+    let mut settings = read(config_dir);
+    settings.ai_connection = Some(connection);
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
+pub(crate) fn remove_ai_connection(config_dir: &Path) -> AppResult<Settings> {
+    let mut settings = read(config_dir);
+    settings.ai_connection = None;
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
 fn save_theme(config_dir: &Path, theme: String) -> AppResult<Settings> {
     if !VALID_THEMES.contains(&theme.as_str()) {
         return Err(AppError::Invalid(format!(
@@ -92,6 +123,32 @@ pub fn set_last_sync_file_path(app: AppHandle, path: String) -> AppResult<Settin
 pub fn set_theme(app: AppHandle, theme: String) -> AppResult<Settings> {
     let config_dir = app.path().app_config_dir()?;
     save_theme(&config_dir, theme)
+}
+
+#[tauri::command]
+pub fn set_ai_connection(
+    app: AppHandle,
+    provider: String,
+    base_url: String,
+    api_key: String,
+    model: String,
+) -> AppResult<Settings> {
+    let config_dir = app.path().app_config_dir()?;
+    save_ai_connection(
+        &config_dir,
+        AIConnection {
+            provider,
+            base_url,
+            api_key,
+            model,
+        },
+    )
+}
+
+#[tauri::command]
+pub fn clear_ai_connection(app: AppHandle) -> AppResult<Settings> {
+    let config_dir = app.path().app_config_dir()?;
+    remove_ai_connection(&config_dir)
 }
 
 #[cfg(test)]
@@ -185,6 +242,68 @@ mod tests {
         let cleared = clear_cloud_sync(dir.path()).unwrap();
         assert_eq!(cleared.cloud_sync, None);
         assert_eq!(read(dir.path()).cloud_sync, None);
+    }
+
+    #[test]
+    fn ai_connection_round_trips_and_can_be_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let connection = AIConnection {
+            provider: "openwebui".into(),
+            base_url: "https://openwebui.example.com".into(),
+            api_key: "sk-test".into(),
+            model: "sonnet-5".into(),
+        };
+
+        let written = save_ai_connection(dir.path(), connection.clone()).unwrap();
+        assert_eq!(written.ai_connection, Some(connection.clone()));
+
+        let read_back = read(dir.path());
+        assert_eq!(read_back.ai_connection, Some(connection));
+
+        let cleared = remove_ai_connection(dir.path()).unwrap();
+        assert_eq!(cleared.ai_connection, None);
+        assert_eq!(read(dir.path()).ai_connection, None);
+    }
+
+    #[test]
+    fn ai_connection_rejects_an_unknown_provider() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = save_ai_connection(
+            dir.path(),
+            AIConnection {
+                provider: "some-other-provider".into(),
+                base_url: "https://example.com".into(),
+                api_key: "key".into(),
+                model: "model".into(),
+            },
+        );
+        assert!(matches!(result, Err(AppError::Invalid(_))));
+    }
+
+    #[test]
+    fn ai_connection_rejects_a_blank_base_url_or_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let blank_url = save_ai_connection(
+            dir.path(),
+            AIConnection {
+                provider: "openwebui".into(),
+                base_url: "  ".into(),
+                api_key: "key".into(),
+                model: "model".into(),
+            },
+        );
+        assert!(matches!(blank_url, Err(AppError::Invalid(_))));
+
+        let blank_model = save_ai_connection(
+            dir.path(),
+            AIConnection {
+                provider: "openwebui".into(),
+                base_url: "https://example.com".into(),
+                api_key: "key".into(),
+                model: "".into(),
+            },
+        );
+        assert!(matches!(blank_model, Err(AppError::Invalid(_))));
     }
 
     #[test]

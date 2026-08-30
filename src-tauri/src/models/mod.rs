@@ -8,7 +8,7 @@ pub mod workspace;
 
 pub use epic::Epic;
 pub use project::Project;
-pub use settings::{CloudSync, Settings};
+pub use settings::{AIConnection, CloudSync, Settings};
 pub use tag::Tag;
 pub use task::{Subtask, Task, TaskDetail, TaskSummary};
 pub use user_story::UserStory;

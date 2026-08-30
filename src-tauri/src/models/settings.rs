@@ -12,6 +12,11 @@ pub struct Settings {
     /// a different provider replaces this wholesale rather than keeping
     /// multiple connections around at once.
     pub cloud_sync: Option<CloudSync>,
+    /// The AI assistant's backend connection, if configured. Stored in
+    /// plain text like `db_file_path` — no encryption, a deliberate choice
+    /// (unlike `CloudSync.passphrase`, which is deliberately never round-
+    /// tripped back to the frontend).
+    pub ai_connection: Option<AIConnection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -28,4 +33,15 @@ pub struct CloudSync {
     /// `set_cloud_passphrase`, read only by push/pull, never sent back to
     /// the frontend (`CloudStatus` only reports whether one is set).
     pub passphrase: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AIConnection {
+    /// Which `ai::AIProvider` to use, e.g. "openwebui". Only one is
+    /// supported today (see `ai::resolve_provider`) but this leaves room
+    /// for more without changing the storage shape.
+    pub provider: String,
+    pub base_url: String,
+    pub api_key: String,
+    pub model: String,
 }

@@ -3,9 +3,7 @@ use std::sync::Mutex;
 use crate::db::AppState;
 use crate::error::{AppError, AppResult};
 
-use super::{
-    AIProvider, AIResponse, ChatMessage, ChatRole, ToolContext, ToolDefinition, ToolExecutor,
-};
+use super::{AIProvider, AIResponse, ChatMessage, ToolContext, ToolDefinition, ToolExecutor};
 
 /// Guards against a misbehaving (or malicious) provider that always
 /// requests another tool call — without this, `send_message` would loop
@@ -38,27 +36,23 @@ impl AIChatOrchestrator {
     ) -> AppResult<String> {
         let mut history = self.history.lock().map_err(|_| AppError::Lock)?;
 
-        history.push(ChatMessage {
-            role: ChatRole::User,
-            content: user_message,
-        });
+        history.push(ChatMessage::user(user_message));
 
         for _ in 0..MAX_ITERATIONS {
             match provider.send(&history, tools)? {
                 AIResponse::Message(text) => {
-                    history.push(ChatMessage {
-                        role: ChatRole::Assistant,
-                        content: text.clone(),
-                    });
+                    history.push(ChatMessage::assistant(text.clone()));
                     return Ok(text);
                 }
                 AIResponse::ToolCalls(calls) => {
+                    // The request that made these calls must appear in
+                    // history before their results, or an OpenAI-style API
+                    // rejects the next request outright (see ai/mod.rs's
+                    // ChatMessage doc comment).
+                    history.push(ChatMessage::assistant_tool_calls(calls.clone()));
                     for call in calls {
                         let result = executor.execute(&call, ctx, db)?;
-                        history.push(ChatMessage {
-                            role: ChatRole::Tool,
-                            content: result.to_string(),
-                        });
+                        history.push(ChatMessage::tool_result(call.id, result.to_string()));
                     }
                 }
             }
@@ -80,7 +74,7 @@ impl Default for AIChatOrchestrator {
 mod tests {
     use super::*;
     use crate::ai::mock::{MockAIProvider, MockToolExecutor};
-    use crate::ai::ToolCall;
+    use crate::ai::{ChatRole, ToolCall};
     use crate::db::{self, DbStatus};
     use serde_json::json;
 
@@ -129,10 +123,15 @@ mod tests {
         assert_eq!(reply, "Final response after tool");
 
         let history = orchestrator.history.lock().unwrap();
-        // user message, tool result, final assistant message
-        assert_eq!(history.len(), 3);
-        assert_eq!(history[1].role, ChatRole::Tool);
-        assert_eq!(history[1].content, json!({ "ok": true }).to_string());
+        // user message, assistant's tool-call request, tool result, final
+        // assistant message
+        assert_eq!(history.len(), 4);
+        assert_eq!(history[1].role, ChatRole::Assistant);
+        assert_eq!(history[1].tool_calls.len(), 1);
+        assert_eq!(history[1].tool_calls[0].name, "mock_tool");
+        assert_eq!(history[2].role, ChatRole::Tool);
+        assert_eq!(history[2].tool_call_id.as_deref(), Some("mock-call-1"));
+        assert_eq!(history[2].content, json!({ "ok": true }).to_string());
     }
 
     struct AlwaysToolCallsProvider;

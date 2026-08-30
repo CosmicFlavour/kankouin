@@ -68,6 +68,8 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::set_last_sync_file_path,
             commands::settings::set_theme,
+            commands::settings::set_ai_connection,
+            commands::settings::clear_ai_connection,
             commands::database::create_database_file,
             commands::database::open_database_file,
             commands::database::get_database_status,
