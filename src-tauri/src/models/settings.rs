@@ -35,6 +35,17 @@ pub struct CloudSync {
     pub passphrase: Option<String>,
 }
 
+/// Default per-request timeout for talking to the AI backend, used both as
+/// the settings UI's starting value and as the fallback for `ai_connection`
+/// entries saved before `timeout_seconds` existed (via `#[serde(default)]`
+/// below) — old settings.json files must keep deserializing rather than
+/// losing every other setting because of one new required field.
+pub const DEFAULT_AI_TIMEOUT_SECS: u64 = 120;
+
+fn default_ai_timeout_secs() -> u64 {
+    DEFAULT_AI_TIMEOUT_SECS
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AIConnection {
     /// Which `ai::AIProvider` to use, e.g. "openwebui". Only one is
@@ -44,4 +55,9 @@ pub struct AIConnection {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    /// How long a single request to the AI backend may take before giving
+    /// up (see `ai::openwebui::OpenWebUIProvider`) — without this, a
+    /// stalled backend hangs a chat turn indefinitely.
+    #[serde(default = "default_ai_timeout_secs")]
+    pub timeout_seconds: u64,
 }

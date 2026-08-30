@@ -6,20 +6,18 @@ use crate::error::{AppError, AppResult};
 
 use super::{AIProvider, AIResponse, ChatMessage, ChatRole, ToolCall, ToolDefinition};
 
-/// A stalled OpenWebUI instance (or a route to nowhere) must not hang a
-/// chat turn forever — the orchestrator can call `send` up to
-/// `orchestrator::MAX_ITERATIONS` times per turn, and there's no
-/// cancel button in the UI, so an unbounded request is an unbounded hang
-/// with the only recovery being an app restart. 120s is generous for a
-/// local model to actually finish generating, while still bounding the
-/// worst case.
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(120);
-
 /// Talks to a self-hosted OpenWebUI instance over its OpenAI-compatible
 /// `/api/chat/completions` endpoint (bearer auth, `{model, messages, tools}`
 /// request, `choices[0].message` response, optional native `tool_calls` —
 /// support for the latter depends on which model OpenWebUI is pointed at,
 /// so a response with no `tool_calls` is just treated as a normal message).
+///
+/// `timeout` is caller-supplied (from `AIConnection::timeout_seconds`, user-
+/// configurable in the settings UI) rather than a fixed constant — a
+/// stalled OpenWebUI instance must not hang a chat turn forever, and the
+/// orchestrator can call `send` up to `MAX_ITERATIONS` times per turn with
+/// no cancel button in the UI, so what counts as "too long" needs to be
+/// adjustable per deployment (a slow local model vs. a hung endpoint).
 pub struct OpenWebUIProvider {
     base_url: String,
     api_key: String,
@@ -28,13 +26,7 @@ pub struct OpenWebUIProvider {
 }
 
 impl OpenWebUIProvider {
-    pub fn new(base_url: String, api_key: String, model: String) -> Self {
-        Self::with_timeout(base_url, api_key, model, DEFAULT_TIMEOUT)
-    }
-
-    /// Split out from `new` so tests can use a short timeout instead of
-    /// waiting on the real (120s) default.
-    fn with_timeout(base_url: String, api_key: String, model: String, timeout: Duration) -> Self {
+    pub fn new(base_url: String, api_key: String, model: String, timeout: Duration) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             api_key,
@@ -235,6 +227,66 @@ impl AIProvider for OpenWebUIProvider {
     }
 }
 
+/// Result of probing a connection before it's saved — lets the settings UI
+/// show something more useful than "it worked" or "it didn't": whether the
+/// configured model is actually one OpenWebUI knows about.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConnectionTestResult {
+    pub model_found: bool,
+    pub available_models: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ModelsResponse {
+    #[serde(default)]
+    data: Vec<ModelEntry>,
+}
+
+#[derive(Deserialize)]
+struct ModelEntry {
+    id: String,
+}
+
+/// Probes a connection's reachability/auth via OpenWebUI's `GET /api/models`
+/// — cheap (no generation, no tokens spent) and, as a side effect, tells us
+/// whether the given model name is actually one OpenWebUI has available,
+/// which a bare "did the request succeed" check couldn't. Standalone rather
+/// than a method on `OpenWebUIProvider`/part of `AIProvider`: it runs
+/// against *draft*, not-yet-saved connection details from the settings
+/// dialog, so there's no saved `AIConnection` (and thus no `AIProvider`) to
+/// call it on yet.
+pub fn test_connection(
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    timeout: Duration,
+) -> AppResult<ConnectionTestResult> {
+    let endpoint = format!("{}/api/models", base_url.trim_end_matches('/'));
+
+    let response = ureq::get(&endpoint)
+        .set("Authorization", &format!("Bearer {api_key}"))
+        .timeout(timeout)
+        .call()
+        .map_err(|e| {
+            AppError::Invalid(format!(
+                "OpenWebUI connection test failed: {}",
+                crate::cloud::describe_ureq_error(e)
+            ))
+        })?;
+
+    let body: ModelsResponse = response
+        .into_json()
+        .map_err(|e| AppError::Invalid(format!("invalid response from OpenWebUI: {e}")))?;
+
+    let available_models: Vec<String> = body.data.into_iter().map(|m| m.id).collect();
+    let model_found = available_models.iter().any(|m| m == model);
+
+    Ok(ConnectionTestResult {
+        model_found,
+        available_models,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,7 +369,12 @@ mod tests {
             "HTTP/1.1 200 OK",
             br#"{"choices":[{"message":{"role":"assistant","content":"hi there"}}]}"#,
         );
-        let provider = OpenWebUIProvider::new(url, "test-key".into(), "sonnet-5".into());
+        let provider = OpenWebUIProvider::new(
+            url,
+            "test-key".into(),
+            "sonnet-5".into(),
+            Duration::from_secs(5),
+        );
 
         let reply = provider.send(&[ChatMessage::user("hello")], &[]).unwrap();
 
@@ -338,7 +395,12 @@ mod tests {
             "HTTP/1.1 200 OK",
             br#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#,
         );
-        let provider = OpenWebUIProvider::new(format!("{url}/"), "key".into(), "model".into());
+        let provider = OpenWebUIProvider::new(
+            format!("{url}/"),
+            "key".into(),
+            "model".into(),
+            Duration::from_secs(5),
+        );
 
         provider.send(&[ChatMessage::user("hi")], &[]).unwrap();
 
@@ -354,7 +416,8 @@ mod tests {
             "HTTP/1.1 200 OK",
             br#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#,
         );
-        let provider = OpenWebUIProvider::new(url, "key".into(), "model".into());
+        let provider =
+            OpenWebUIProvider::new(url, "key".into(), "model".into(), Duration::from_secs(5));
         let tools = vec![ToolDefinition {
             name: "create_task".into(),
             description: "Creates a task".into(),
@@ -383,7 +446,8 @@ mod tests {
             "HTTP/1.1 200 OK",
             br#"{"choices":[{"message":{"role":"assistant","content":"done"}}]}"#,
         );
-        let provider = OpenWebUIProvider::new(url, "key".into(), "model".into());
+        let provider =
+            OpenWebUIProvider::new(url, "key".into(), "model".into(), Duration::from_secs(5));
         let messages = vec![
             ChatMessage::user("add a subtask"),
             ChatMessage::assistant_tool_calls(vec![ToolCall {
@@ -425,7 +489,8 @@ mod tests {
                 {"id":"call-9","function":{"name":"list_tasks","arguments":"{\"project_id\":\"p1\"}"}}
             ]}}]}"#,
         );
-        let provider = OpenWebUIProvider::new(url, "key".into(), "model".into());
+        let provider =
+            OpenWebUIProvider::new(url, "key".into(), "model".into(), Duration::from_secs(5));
 
         let reply = provider.send(&[ChatMessage::user("hi")], &[]).unwrap();
 
@@ -446,7 +511,12 @@ mod tests {
             "HTTP/1.1 401 Unauthorized",
             br#"{"error":{"message":"invalid API key"}}"#,
         );
-        let provider = OpenWebUIProvider::new(url, "bad-key".into(), "model".into());
+        let provider = OpenWebUIProvider::new(
+            url,
+            "bad-key".into(),
+            "model".into(),
+            Duration::from_secs(5),
+        );
 
         let err = provider.send(&[ChatMessage::user("hi")], &[]).unwrap_err();
 
@@ -477,7 +547,7 @@ mod tests {
     #[test]
     fn send_times_out_instead_of_hanging_forever_on_a_stalled_server() {
         let url = serve_and_hang();
-        let provider = OpenWebUIProvider::with_timeout(
+        let provider = OpenWebUIProvider::new(
             url,
             "key".into(),
             "model".into(),
@@ -493,5 +563,43 @@ mod tests {
             start.elapsed()
         );
         assert!(err.to_string().contains("OpenWebUI request failed"));
+    }
+
+    #[test]
+    fn test_connection_reports_when_the_model_is_found() {
+        let (url, rx) = serve_and_capture(
+            "HTTP/1.1 200 OK",
+            br#"{"data":[{"id":"sonnet-5"},{"id":"llama3.1:70b"}]}"#,
+        );
+
+        let result = test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5)).unwrap();
+
+        assert!(result.model_found);
+        assert_eq!(result.available_models, vec!["sonnet-5", "llama3.1:70b"]);
+        let captured = rx.recv().unwrap();
+        assert_eq!(header(&captured, "Authorization"), Some("Bearer test-key"));
+    }
+
+    #[test]
+    fn test_connection_reports_when_the_model_is_not_found() {
+        let (url, _rx) =
+            serve_and_capture("HTTP/1.1 200 OK", br#"{"data":[{"id":"llama3.1:70b"}]}"#);
+
+        let result = test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5)).unwrap();
+
+        assert!(!result.model_found);
+        assert_eq!(result.available_models, vec!["llama3.1:70b"]);
+    }
+
+    #[test]
+    fn test_connection_surfaces_a_clean_error_on_bad_auth() {
+        let (url, _rx) = serve_and_capture(
+            "HTTP/1.1 401 Unauthorized",
+            br#"{"error":{"message":"invalid API key"}}"#,
+        );
+
+        let err = test_connection(&url, "bad-key", "sonnet-5", Duration::from_secs(5)).unwrap_err();
+
+        assert!(err.to_string().contains("invalid API key"));
     }
 }

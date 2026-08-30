@@ -9,6 +9,7 @@ use crate::models::{AIConnection, CloudSync, Settings};
 const FILE_NAME: &str = "settings.json";
 const VALID_THEMES: [&str; 2] = ["light", "dark"];
 const VALID_AI_PROVIDERS: [&str; 1] = ["openwebui"];
+const MAX_AI_TIMEOUT_SECS: u64 = 600;
 
 /// Reads `settings.json` from `config_dir`. A missing file (first run) or a
 /// corrupted one both fall back to defaults rather than erroring — this is
@@ -81,6 +82,11 @@ pub(crate) fn save_ai_connection(
     if connection.model.trim().is_empty() {
         return Err(AppError::Invalid("model must not be blank".into()));
     }
+    if connection.timeout_seconds == 0 || connection.timeout_seconds > MAX_AI_TIMEOUT_SECS {
+        return Err(AppError::Invalid(format!(
+            "timeout_seconds must be between 1 and {MAX_AI_TIMEOUT_SECS}"
+        )));
+    }
 
     let mut settings = read(config_dir);
     settings.ai_connection = Some(connection);
@@ -132,6 +138,7 @@ pub fn set_ai_connection(
     base_url: String,
     api_key: String,
     model: String,
+    timeout_seconds: u64,
 ) -> AppResult<Settings> {
     let config_dir = app.path().app_config_dir()?;
     save_ai_connection(
@@ -141,6 +148,7 @@ pub fn set_ai_connection(
             base_url,
             api_key,
             model,
+            timeout_seconds,
         },
     )
 }
@@ -252,6 +260,7 @@ mod tests {
             base_url: "https://openwebui.example.com".into(),
             api_key: "sk-test".into(),
             model: "sonnet-5".into(),
+            timeout_seconds: 90,
         };
 
         let written = save_ai_connection(dir.path(), connection.clone()).unwrap();
@@ -275,6 +284,7 @@ mod tests {
                 base_url: "https://example.com".into(),
                 api_key: "key".into(),
                 model: "model".into(),
+                timeout_seconds: 120,
             },
         );
         assert!(matches!(result, Err(AppError::Invalid(_))));
@@ -290,6 +300,7 @@ mod tests {
                 base_url: "  ".into(),
                 api_key: "key".into(),
                 model: "model".into(),
+                timeout_seconds: 120,
             },
         );
         assert!(matches!(blank_url, Err(AppError::Invalid(_))));
@@ -301,9 +312,54 @@ mod tests {
                 base_url: "https://example.com".into(),
                 api_key: "key".into(),
                 model: "".into(),
+                timeout_seconds: 120,
             },
         );
         assert!(matches!(blank_model, Err(AppError::Invalid(_))));
+    }
+
+    #[test]
+    fn ai_connection_rejects_a_zero_or_excessive_timeout() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = AIConnection {
+            provider: "openwebui".into(),
+            base_url: "https://example.com".into(),
+            api_key: "key".into(),
+            model: "model".into(),
+            timeout_seconds: 0,
+        };
+
+        let zero = save_ai_connection(dir.path(), base.clone());
+        assert!(matches!(zero, Err(AppError::Invalid(_))));
+
+        let too_long = save_ai_connection(
+            dir.path(),
+            AIConnection {
+                timeout_seconds: 601,
+                ..base
+            },
+        );
+        assert!(matches!(too_long, Err(AppError::Invalid(_))));
+    }
+
+    #[test]
+    fn ai_connection_missing_timeout_seconds_in_json_defaults_instead_of_resetting_all_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        // Simulates a settings.json saved before `timeout_seconds` existed.
+        fs::create_dir_all(dir.path()).unwrap();
+        fs::write(
+            dir.path().join(FILE_NAME),
+            r#"{"theme":"dark","ai_connection":{"provider":"openwebui","base_url":"https://x.com","api_key":"k","model":"m"}}"#,
+        )
+        .unwrap();
+
+        let settings = read(dir.path());
+
+        assert_eq!(settings.theme.as_deref(), Some("dark"));
+        assert_eq!(
+            settings.ai_connection.unwrap().timeout_seconds,
+            crate::models::settings::DEFAULT_AI_TIMEOUT_SECS
+        );
     }
 
     #[test]

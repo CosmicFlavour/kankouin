@@ -117,6 +117,7 @@ pub fn resolve_provider(settings: &Settings) -> Box<dyn AIProvider> {
             conn.base_url.clone(),
             conn.api_key.clone(),
             conn.model.clone(),
+            std::time::Duration::from_secs(conn.timeout_seconds),
         )),
         _ => Box::new(mock::MockAIProvider),
     }
