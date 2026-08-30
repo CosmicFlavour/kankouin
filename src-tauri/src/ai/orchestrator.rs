@@ -58,8 +58,16 @@ impl AIChatOrchestrator {
             }
         }
 
+        // Tool calls up to this point already ran against the real DB —
+        // this is a "the AI didn't wrap up in time" error, not a "nothing
+        // happened" one, and the message says so. The frontend also treats
+        // *every* chat_with_ai outcome (success or error) as a reason to
+        // refetch, precisely because a failure can still follow committed
+        // mutations (see useAIChat.ts).
         Err(AppError::Invalid(
-            "ai response loop exceeded max iterations".into(),
+            "the AI assistant took too many steps without finishing — actions it already took \
+             (if any) were applied; check the board before retrying"
+                .into(),
         ))
     }
 }
@@ -167,5 +175,8 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(err, AppError::Invalid(_)));
+        // The tool calls that already ran (5 rounds' worth, against the
+        // real db) must not be reported as if nothing happened.
+        assert!(err.to_string().contains("already took"));
     }
 }
