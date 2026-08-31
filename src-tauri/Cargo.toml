@@ -41,4 +41,7 @@ base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"
+# Generates a throwaway CA + server certificate for the custom-CA TLS
+# round-trip test in ai::openwebui — never used outside `#[cfg(test)]`.
+rcgen = "0.13"
 

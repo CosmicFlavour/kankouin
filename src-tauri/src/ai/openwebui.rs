@@ -78,10 +78,13 @@ fn build_agent(ca_certificate_path: Option<&str>) -> AppResult<ureq::Agent> {
         )));
     }
 
-    let mut root_store = ureq::rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let mut root_store =
+        ureq::rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     for cert in extra_roots {
         root_store.add(cert).map_err(|e| {
-            AppError::Invalid(format!("could not add a certificate from '{path}' to the trust store: {e}"))
+            AppError::Invalid(format!(
+                "could not add a certificate from '{path}' to the trust store: {e}"
+            ))
         })?;
     }
 
@@ -96,7 +99,9 @@ fn build_agent(ca_certificate_path: Option<&str>) -> AppResult<ureq::Agent> {
     .with_root_certificates(root_store)
     .with_no_client_auth();
 
-    Ok(ureq::AgentBuilder::new().tls_config(Arc::new(config)).build())
+    Ok(ureq::AgentBuilder::new()
+        .tls_config(Arc::new(config))
+        .build())
 }
 
 #[derive(Serialize)]
@@ -271,7 +276,9 @@ impl AIProvider for OpenWebUIProvider {
             stream: false,
         };
 
-        let response = self.agent.post(&endpoint)
+        let response = self
+            .agent
+            .post(&endpoint)
             .set("Authorization", &format!("Bearer {}", self.api_key))
             .set("Content-Type", "application/json")
             .timeout(self.timeout)
@@ -333,7 +340,8 @@ pub fn test_connection(
     // connection that only works without the corporate CA.
     let agent = build_agent(ca_certificate_path)?;
 
-    let response = agent.get(&endpoint)
+    let response = agent
+        .get(&endpoint)
         .set("Authorization", &format!("Bearer {api_key}"))
         .timeout(timeout)
         .call()
@@ -668,7 +676,8 @@ mod tests {
             br#"{"data":[{"id":"sonnet-5"},{"id":"llama3.1:70b"}]}"#,
         );
 
-        let result = test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5), None).unwrap();
+        let result =
+            test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5), None).unwrap();
 
         assert!(result.model_found);
         assert_eq!(result.available_models, vec!["sonnet-5", "llama3.1:70b"]);
@@ -681,7 +690,8 @@ mod tests {
         let (url, _rx) =
             serve_and_capture("HTTP/1.1 200 OK", br#"{"data":[{"id":"llama3.1:70b"}]}"#);
 
-        let result = test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5), None).unwrap();
+        let result =
+            test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5), None).unwrap();
 
         assert!(!result.model_found);
         assert_eq!(result.available_models, vec!["llama3.1:70b"]);
@@ -712,7 +722,9 @@ mod tests {
     fn build_agent_fails_cleanly_on_an_unreadable_ca_path() {
         let err = build_agent(Some("/nonexistent/corporate-ca.pem")).unwrap_err();
 
-        assert!(err.to_string().contains("could not read CA certificate file"));
+        assert!(err
+            .to_string()
+            .contains("could not read CA certificate file"));
     }
 
     #[test]
@@ -724,5 +736,167 @@ mod tests {
         let err = build_agent(Some(path.to_str().unwrap())).unwrap_err();
 
         assert!(err.to_string().contains("no PEM-encoded certificates"));
+    }
+
+    /// A throwaway CA and a server leaf cert signed by it, for the
+    /// custom-CA TLS round-trip tests below — the thing none of the tests
+    /// above actually exercise, since `serve_and_capture`/`serve_and_hang`
+    /// are plain HTTP with no TLS involved at all.
+    struct TestCa {
+        ca_cert_pem: String,
+        server_config: Arc<ureq::rustls::ServerConfig>,
+    }
+
+    fn generate_test_ca() -> TestCa {
+        let ca_key = rcgen::KeyPair::generate().unwrap();
+        let mut ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+        ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        let ca_cert = ca_params.self_signed(&ca_key).unwrap();
+
+        // SAN must cover whatever host the client dials — the tests below
+        // always connect to 127.0.0.1.
+        let server_key = rcgen::KeyPair::generate().unwrap();
+        let server_params = rcgen::CertificateParams::new(vec!["127.0.0.1".to_string()]).unwrap();
+        let server_cert = server_params
+            .signed_by(&server_key, &ca_cert, &ca_key)
+            .unwrap();
+
+        let server_config = ureq::rustls::ServerConfig::builder_with_provider(
+            ureq::rustls::crypto::ring::default_provider().into(),
+        )
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![server_cert.der().clone()],
+            rustls_pki_types::PrivateKeyDer::Pkcs8(server_key.serialize_der().into()),
+        )
+        .unwrap();
+
+        TestCa {
+            ca_cert_pem: ca_cert.pem(),
+            server_config: Arc::new(server_config),
+        }
+    }
+
+    /// Same request/response shape as `serve_and_capture`, but the socket is
+    /// wrapped in a real TLS handshake using `server_config` — so a client
+    /// that doesn't trust the cert this presents fails at the handshake,
+    /// before any HTTP is exchanged at all.
+    fn serve_tls_and_capture(
+        server_config: Arc<ureq::rustls::ServerConfig>,
+        status_line: &'static str,
+        response_body: &'static [u8],
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        thread::spawn(move || {
+            let (sock, _) = listener.accept().unwrap();
+            // Handshake failures (a client that rejects this cert) surface
+            // as an `Err` from `ServerConnection::new`/the first read — in
+            // that case there's nothing to serve, so just drop the thread.
+            let Ok(conn) = ureq::rustls::ServerConnection::new(server_config) else {
+                return;
+            };
+            let tls_stream = ureq::rustls::StreamOwned::new(conn, sock);
+            let mut reader = BufReader::new(tls_stream);
+
+            let mut request_line = String::new();
+            if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
+                // Handshake never completed (client walked away after
+                // rejecting the cert) — nothing more to do.
+                return;
+            }
+
+            let mut content_length = 0usize;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                if let Some((name, value)) = line.trim_end().split_once(':') {
+                    if name.trim().eq_ignore_ascii_case("content-length") {
+                        content_length = value.trim().parse().unwrap_or(0);
+                    }
+                }
+            }
+            if content_length > 0 {
+                let mut body = vec![0u8; content_length];
+                reader.read_exact(&mut body).unwrap();
+            }
+
+            let response_head = format!(
+                "{status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                response_body.len(),
+            );
+            let _ = reader.get_mut().write_all(response_head.as_bytes());
+            let _ = reader.get_mut().write_all(response_body);
+        });
+
+        format!("https://{addr}")
+    }
+
+    #[test]
+    fn send_succeeds_against_a_server_whose_cert_is_signed_by_the_configured_custom_ca() {
+        let ca = generate_test_ca();
+        let url = serve_tls_and_capture(
+            ca.server_config,
+            "HTTP/1.1 200 OK",
+            br#"{"choices":[{"message":{"role":"assistant","content":"hi over tls"}}]}"#,
+        );
+        let cert_dir = tempfile::tempdir().unwrap();
+        let cert_path = cert_dir.path().join("corporate-ca.pem");
+        std::fs::write(&cert_path, &ca.ca_cert_pem).unwrap();
+
+        let provider = OpenWebUIProvider::new(
+            url,
+            "test-key".into(),
+            "model".into(),
+            Duration::from_secs(5),
+            Some(cert_path.to_str().unwrap().to_string()),
+        )
+        .unwrap();
+
+        let reply = provider.send(&[ChatMessage::user("hello")], &[]).unwrap();
+
+        assert!(matches!(reply, AIResponse::Message(text) if text == "hi over tls"));
+    }
+
+    #[test]
+    fn send_fails_against_a_server_whose_cert_is_covered_by_neither_public_roots_nor_a_custom_ca() {
+        let ca = generate_test_ca();
+        let url = serve_tls_and_capture(
+            ca.server_config,
+            "HTTP/1.1 200 OK",
+            br#"{"choices":[{"message":{"role":"assistant","content":"should never be read"}}]}"#,
+        );
+        // No `ca_certificate_path` — only the stock public roots, which
+        // don't (and can't) cover a freshly generated test CA. This is the
+        // control for the test above: it proves `build_agent` is actually
+        // enforcing verification rather than, say, silently accepting any
+        // server cert once TLS is wired up.
+        let provider = OpenWebUIProvider::new(
+            url,
+            "test-key".into(),
+            "model".into(),
+            Duration::from_secs(5),
+            None,
+        )
+        .unwrap();
+
+        let err = provider
+            .send(&[ChatMessage::user("hello")], &[])
+            .unwrap_err();
+
+        // Specifically a rejected-certificate failure (`UnknownIssuer`), not
+        // just any transport error — proves the client actually verified
+        // the cert against its trust store rather than, say, refusing to
+        // connect for an unrelated reason.
+        assert!(
+            err.to_string().contains("UnknownIssuer"),
+            "expected a certificate-verification error, got: {err}"
+        );
     }
 }

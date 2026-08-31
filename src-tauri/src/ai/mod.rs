@@ -129,15 +129,15 @@ pub trait AIProvider: Send + Sync {
 /// problem than to retry TLS with default roots.
 pub fn resolve_provider(settings: &Settings) -> AppResult<Box<dyn AIProvider>> {
     match &settings.ai_connection {
-        Some(conn) if conn.provider == "openwebui" => Ok(Box::new(
-            openwebui::OpenWebUIProvider::new(
+        Some(conn) if conn.provider == "openwebui" => {
+            Ok(Box::new(openwebui::OpenWebUIProvider::new(
                 conn.base_url.clone(),
                 conn.api_key.clone(),
                 conn.model.clone(),
                 std::time::Duration::from_secs(conn.timeout_seconds),
                 conn.ca_certificate_path.clone(),
-            )?,
-        )),
+            )?))
+        }
         _ => Ok(Box::new(mock::MockAIProvider)),
     }
 }
