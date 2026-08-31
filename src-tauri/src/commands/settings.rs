@@ -139,6 +139,7 @@ pub fn set_ai_connection(
     api_key: String,
     model: String,
     timeout_seconds: u64,
+    ca_certificate_path: Option<String>,
 ) -> AppResult<Settings> {
     let config_dir = app.path().app_config_dir()?;
     save_ai_connection(
@@ -149,6 +150,7 @@ pub fn set_ai_connection(
             api_key,
             model,
             timeout_seconds,
+            ca_certificate_path,
         },
     )
 }
@@ -261,6 +263,7 @@ mod tests {
             api_key: "sk-test".into(),
             model: "sonnet-5".into(),
             timeout_seconds: 90,
+            ca_certificate_path: Some("/etc/ssl/certs/corporate-ca.pem".into()),
         };
 
         let written = save_ai_connection(dir.path(), connection.clone()).unwrap();
@@ -285,6 +288,7 @@ mod tests {
                 api_key: "key".into(),
                 model: "model".into(),
                 timeout_seconds: 120,
+                ca_certificate_path: None,
             },
         );
         assert!(matches!(result, Err(AppError::Invalid(_))));
@@ -301,6 +305,7 @@ mod tests {
                 api_key: "key".into(),
                 model: "model".into(),
                 timeout_seconds: 120,
+                ca_certificate_path: None,
             },
         );
         assert!(matches!(blank_url, Err(AppError::Invalid(_))));
@@ -313,6 +318,7 @@ mod tests {
                 api_key: "key".into(),
                 model: "".into(),
                 timeout_seconds: 120,
+                ca_certificate_path: None,
             },
         );
         assert!(matches!(blank_model, Err(AppError::Invalid(_))));
@@ -327,6 +333,7 @@ mod tests {
             api_key: "key".into(),
             model: "model".into(),
             timeout_seconds: 0,
+            ca_certificate_path: None,
         };
 
         let zero = save_ai_connection(dir.path(), base.clone());

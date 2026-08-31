@@ -1,5 +1,7 @@
+use std::sync::Arc;
 use std::time::Duration;
 
+use rustls_pki_types::pem::PemObject;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, AppResult};
@@ -23,17 +25,78 @@ pub struct OpenWebUIProvider {
     api_key: String,
     model: String,
     timeout: Duration,
+    /// All requests go through this one agent — it carries the TLS config
+    /// (`build_agent`) built from the connection's optional CA certificate,
+    /// which ureq only exposes at agent level.
+    agent: ureq::Agent,
 }
 
 impl OpenWebUIProvider {
-    pub fn new(base_url: String, api_key: String, model: String, timeout: Duration) -> Self {
-        Self {
+    pub fn new(
+        base_url: String,
+        api_key: String,
+        model: String,
+        timeout: Duration,
+        ca_certificate_path: Option<String>,
+    ) -> AppResult<Self> {
+        Ok(Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             api_key,
             model,
             timeout,
-        }
+            agent: build_agent(ca_certificate_path.as_deref())?,
+        })
     }
+}
+
+/// Builds the `ureq::Agent` for a connection. With no custom CA configured
+/// this is the stock agent (default webpki roots). Otherwise the certs from
+/// the PEM file are added *on top of* those roots — never replacing them —
+/// so publicly-signed endpoints keep verifying while an internal/corporate
+/// cert (e.g. a company-issued one not in any public trust store) verifies
+/// too. Fails with a readable error if the file can't be read/parsed, so a
+/// typo'd path surfaces at connect time instead of as a bare TLS failure.
+fn build_agent(ca_certificate_path: Option<&str>) -> AppResult<ureq::Agent> {
+    let Some(path) = ca_certificate_path.map(str::trim).filter(|p| !p.is_empty()) else {
+        return Ok(ureq::Agent::new());
+    };
+
+    // `pem_file_iter` accepts a bundle (multiple certs in one file), which
+    // is what corporate "CA chain" files usually are.
+    let iter = rustls_pki_types::CertificateDer::pem_file_iter(path).map_err(|e| {
+        AppError::Invalid(format!("could not read CA certificate file '{path}': {e}"))
+    })?;
+    let mut extra_roots: Vec<rustls_pki_types::CertificateDer<'static>> = Vec::new();
+    for cert in iter {
+        extra_roots.push(
+            cert.map_err(|e| AppError::Invalid(format!("invalid certificate in '{path}': {e}")))?,
+        );
+    }
+    if extra_roots.is_empty() {
+        return Err(AppError::Invalid(format!(
+            "no PEM-encoded certificates found in '{path}'"
+        )));
+    }
+
+    let mut root_store = ureq::rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    for cert in extra_roots {
+        root_store.add(cert).map_err(|e| {
+            AppError::Invalid(format!("could not add a certificate from '{path}' to the trust store: {e}"))
+        })?;
+    }
+
+    // Same shape as ureq's own default TLS config (see `ureq::rtls`): an
+    // explicit ring provider rather than relying on a process-wide default
+    // crypto provider having been installed.
+    let config = ureq::rustls::ClientConfig::builder_with_provider(
+        ureq::rustls::crypto::ring::default_provider().into(),
+    )
+    .with_protocol_versions(&[&ureq::rustls::version::TLS12, &ureq::rustls::version::TLS13])
+    .map_err(|e| AppError::Invalid(format!("invalid TLS configuration: {e}")))?
+    .with_root_certificates(root_store)
+    .with_no_client_auth();
+
+    Ok(ureq::AgentBuilder::new().tls_config(Arc::new(config)).build())
 }
 
 #[derive(Serialize)]
@@ -208,7 +271,7 @@ impl AIProvider for OpenWebUIProvider {
             stream: false,
         };
 
-        let response = ureq::post(&endpoint)
+        let response = self.agent.post(&endpoint)
             .set("Authorization", &format!("Bearer {}", self.api_key))
             .set("Content-Type", "application/json")
             .timeout(self.timeout)
@@ -261,10 +324,16 @@ pub fn test_connection(
     api_key: &str,
     model: &str,
     timeout: Duration,
+    ca_certificate_path: Option<&str>,
 ) -> AppResult<ConnectionTestResult> {
     let endpoint = format!("{}/api/models", base_url.trim_end_matches('/'));
 
-    let response = ureq::get(&endpoint)
+    // Same custom-CA handling as `OpenWebUIProvider` — the test must go
+    // through TLS exactly the way real requests will, or it would report a
+    // connection that only works without the corporate CA.
+    let agent = build_agent(ca_certificate_path)?;
+
+    let response = agent.get(&endpoint)
         .set("Authorization", &format!("Bearer {api_key}"))
         .timeout(timeout)
         .call()
@@ -375,7 +444,9 @@ mod tests {
             "test-key".into(),
             "sonnet-5".into(),
             Duration::from_secs(5),
-        );
+            None,
+        )
+        .unwrap();
 
         let reply = provider.send(&[ChatMessage::user("hello")], &[]).unwrap();
 
@@ -401,7 +472,9 @@ mod tests {
             "key".into(),
             "model".into(),
             Duration::from_secs(5),
-        );
+            None,
+        )
+        .unwrap();
 
         provider.send(&[ChatMessage::user("hi")], &[]).unwrap();
 
@@ -417,8 +490,14 @@ mod tests {
             "HTTP/1.1 200 OK",
             br#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#,
         );
-        let provider =
-            OpenWebUIProvider::new(url, "key".into(), "model".into(), Duration::from_secs(5));
+        let provider = OpenWebUIProvider::new(
+            url,
+            "key".into(),
+            "model".into(),
+            Duration::from_secs(5),
+            None,
+        )
+        .unwrap();
         let tools = vec![ToolDefinition {
             name: "create_task".into(),
             description: "Creates a task".into(),
@@ -447,8 +526,14 @@ mod tests {
             "HTTP/1.1 200 OK",
             br#"{"choices":[{"message":{"role":"assistant","content":"done"}}]}"#,
         );
-        let provider =
-            OpenWebUIProvider::new(url, "key".into(), "model".into(), Duration::from_secs(5));
+        let provider = OpenWebUIProvider::new(
+            url,
+            "key".into(),
+            "model".into(),
+            Duration::from_secs(5),
+            None,
+        )
+        .unwrap();
         let messages = vec![
             ChatMessage::user("add a subtask"),
             ChatMessage::assistant_tool_calls(vec![ToolCall {
@@ -490,8 +575,14 @@ mod tests {
                 {"id":"call-9","function":{"name":"list_tasks","arguments":"{\"project_id\":\"p1\"}"}}
             ]}}]}"#,
         );
-        let provider =
-            OpenWebUIProvider::new(url, "key".into(), "model".into(), Duration::from_secs(5));
+        let provider = OpenWebUIProvider::new(
+            url,
+            "key".into(),
+            "model".into(),
+            Duration::from_secs(5),
+            None,
+        )
+        .unwrap();
 
         let reply = provider.send(&[ChatMessage::user("hi")], &[]).unwrap();
 
@@ -517,7 +608,9 @@ mod tests {
             "bad-key".into(),
             "model".into(),
             Duration::from_secs(5),
-        );
+            None,
+        )
+        .unwrap();
 
         let err = provider.send(&[ChatMessage::user("hi")], &[]).unwrap_err();
 
@@ -553,7 +646,9 @@ mod tests {
             "key".into(),
             "model".into(),
             std::time::Duration::from_millis(200),
-        );
+            None,
+        )
+        .unwrap();
 
         let start = std::time::Instant::now();
         let err = provider.send(&[ChatMessage::user("hi")], &[]).unwrap_err();
@@ -573,7 +668,7 @@ mod tests {
             br#"{"data":[{"id":"sonnet-5"},{"id":"llama3.1:70b"}]}"#,
         );
 
-        let result = test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5)).unwrap();
+        let result = test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5), None).unwrap();
 
         assert!(result.model_found);
         assert_eq!(result.available_models, vec!["sonnet-5", "llama3.1:70b"]);
@@ -586,7 +681,7 @@ mod tests {
         let (url, _rx) =
             serve_and_capture("HTTP/1.1 200 OK", br#"{"data":[{"id":"llama3.1:70b"}]}"#);
 
-        let result = test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5)).unwrap();
+        let result = test_connection(&url, "test-key", "sonnet-5", Duration::from_secs(5), None).unwrap();
 
         assert!(!result.model_found);
         assert_eq!(result.available_models, vec!["llama3.1:70b"]);
@@ -599,8 +694,35 @@ mod tests {
             br#"{"error":{"message":"invalid API key"}}"#,
         );
 
-        let err = test_connection(&url, "bad-key", "sonnet-5", Duration::from_secs(5)).unwrap_err();
+        let err =
+            test_connection(&url, "bad-key", "sonnet-5", Duration::from_secs(5), None).unwrap_err();
 
         assert!(err.to_string().contains("invalid API key"));
+    }
+
+    #[test]
+    fn build_agent_without_a_ca_path_is_fine() {
+        // No path: stock agent. Blank/whitespace-only path: treated as not
+        // configured rather than attempted.
+        assert!(build_agent(None).is_ok());
+        assert!(build_agent(Some("   ")).is_ok());
+    }
+
+    #[test]
+    fn build_agent_fails_cleanly_on_an_unreadable_ca_path() {
+        let err = build_agent(Some("/nonexistent/corporate-ca.pem")).unwrap_err();
+
+        assert!(err.to_string().contains("could not read CA certificate file"));
+    }
+
+    #[test]
+    fn build_agent_fails_when_the_file_holds_no_certificates() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("not-a-cert.pem");
+        std::fs::write(&path, "this file has no PEM blocks\n").unwrap();
+
+        let err = build_agent(Some(path.to_str().unwrap())).unwrap_err();
+
+        assert!(err.to_string().contains("no PEM-encoded certificates"));
     }
 }

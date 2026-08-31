@@ -18,7 +18,7 @@ pub fn chat_with_ai(
     workspace_name: Option<String>,
 ) -> AppResult<ai::ChatTurnResult> {
     let config_dir = app.path().app_config_dir()?;
-    let provider = ai::resolve_provider(&settings::read(&config_dir));
+    let provider = ai::resolve_provider(&settings::read(&config_dir))?;
     let ctx = ToolContext {
         project_id,
         workspace_id,
@@ -52,6 +52,7 @@ pub fn test_ai_connection(
     api_key: String,
     model: String,
     timeout_seconds: u64,
+    ca_certificate_path: Option<String>,
 ) -> AppResult<openwebui::ConnectionTestResult> {
     if provider != "openwebui" {
         return Err(AppError::Invalid(format!(
@@ -63,5 +64,6 @@ pub fn test_ai_connection(
         &api_key,
         &model,
         std::time::Duration::from_secs(timeout_seconds),
+        ca_certificate_path.as_deref(),
     )
 }

@@ -60,4 +60,12 @@ pub struct AIConnection {
     /// stalled backend hangs a chat turn indefinitely.
     #[serde(default = "default_ai_timeout_secs")]
     pub timeout_seconds: u64,
+    /// Optional path to a PEM file with extra CA certificate(s) to trust
+    /// when verifying the backend's TLS cert — e.g. a corporate root CA on
+    /// an internal network whose certs aren't in the default webpki roots.
+    /// The file's certs are added *on top of* those roots, never replacing
+    /// them. `None` (and what old settings.json files deserialize to via
+    /// `#[serde(default)]`) means "trust only the usual roots".
+    #[serde(default)]
+    pub ca_certificate_path: Option<String>,
 }

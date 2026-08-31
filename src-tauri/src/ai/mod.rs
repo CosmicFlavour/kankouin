@@ -123,16 +123,22 @@ pub trait AIProvider: Send + Sync {
 /// settings-backed command reads `settings::read` fresh, no caching) so a
 /// newly saved connection takes effect immediately, no app restart needed.
 /// Falls back to the mock provider when nothing is configured yet, so the
-/// app stays usable out of the box.
-pub fn resolve_provider(settings: &Settings) -> Box<dyn AIProvider> {
+/// app stays usable out of the box. Can fail when an OpenWebUI connection
+/// configures a CA certificate file that can't be read or parsed (see
+/// `openwebui::build_agent`) — better to error at chat time with the exact
+/// problem than to retry TLS with default roots.
+pub fn resolve_provider(settings: &Settings) -> AppResult<Box<dyn AIProvider>> {
     match &settings.ai_connection {
-        Some(conn) if conn.provider == "openwebui" => Box::new(openwebui::OpenWebUIProvider::new(
-            conn.base_url.clone(),
-            conn.api_key.clone(),
-            conn.model.clone(),
-            std::time::Duration::from_secs(conn.timeout_seconds),
+        Some(conn) if conn.provider == "openwebui" => Ok(Box::new(
+            openwebui::OpenWebUIProvider::new(
+                conn.base_url.clone(),
+                conn.api_key.clone(),
+                conn.model.clone(),
+                std::time::Duration::from_secs(conn.timeout_seconds),
+                conn.ca_certificate_path.clone(),
+            )?,
         )),
-        _ => Box::new(mock::MockAIProvider),
+        _ => Ok(Box::new(mock::MockAIProvider)),
     }
 }
 
