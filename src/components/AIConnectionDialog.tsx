@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ interface AIConnectionDialogProps {
     apiKey: string,
     model: string,
     timeoutSeconds: number,
+    caCertificatePath: string | null,
   ) => Promise<unknown>;
   onClear: () => Promise<unknown>;
 }
@@ -31,6 +33,8 @@ interface TestResult {
   model_found: boolean;
   available_models: string[];
 }
+
+const CA_CERT_FILTERS = [{ name: "Certificates", extensions: ["pem", "crt"] }];
 
 // Only OpenWebUI is supported today, so "provider" is a fixed label rather
 // than a picker — AIConnection.provider still exists as a real field so a
@@ -48,6 +52,7 @@ export function AIConnectionDialog({
   const [timeoutSeconds, setTimeoutSeconds] = useState(
     String(DEFAULT_AI_TIMEOUT_SECONDS),
   );
+  const [caCertPath, setCaCertPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -63,6 +68,7 @@ export function AIConnectionDialog({
     setTimeoutSeconds(
       String(connection?.timeout_seconds ?? DEFAULT_AI_TIMEOUT_SECONDS),
     );
+    setCaCertPath(connection?.ca_certificate_path ?? "");
     setError(null);
     setTestResult(null);
   }, [open, connection]);
@@ -81,13 +87,26 @@ export function AIConnectionDialog({
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   }
 
+  async function handleBrowseCaCert() {
+    const path = await open({ multiple: false, filters: CA_CERT_FILTERS });
+    if (!path || Array.isArray(path)) return;
+    updateField(setCaCertPath)(path);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const timeout = parsedTimeout();
     if (!baseUrl.trim() || !model.trim() || timeout === null) return;
     setBusy(true);
     try {
-      await onSave("openwebui", baseUrl.trim(), apiKey.trim(), model.trim(), timeout);
+      await onSave(
+        "openwebui",
+        baseUrl.trim(),
+        apiKey.trim(),
+        model.trim(),
+        timeout,
+        caCertPath.trim() || null,
+      );
       setOpen(false);
     } catch (err) {
       setError(String(err));
@@ -109,6 +128,7 @@ export function AIConnectionDialog({
         apiKey: apiKey.trim(),
         model: model.trim(),
         timeoutSeconds: timeout,
+        caCertificatePath: caCertPath.trim() || null,
       });
       setTestResult(result);
     } catch (err) {
@@ -164,6 +184,21 @@ export function AIConnectionDialog({
             onChange={(e) => updateField(setTimeoutSeconds)(e.target.value)}
             placeholder="Request timeout (seconds)"
           />
+          <div className="flex gap-2">
+            <Input
+              value={caCertPath}
+              onChange={(e) => updateField(setCaCertPath)(e.target.value)}
+              placeholder="CA certificate path (optional, for internal CAs)"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleBrowseCaCert}
+              disabled={busy}
+            >
+              Browse…
+            </Button>
+          </div>
 
           <Button
             type="button"

@@ -9,6 +9,9 @@ export interface AIConnection {
   api_key: string;
   model: string;
   timeout_seconds: number;
+  // Optional path to a PEM file with extra CA cert(s) to trust (internal
+  // networks whose TLS certs aren't in the public roots). null = stock trust.
+  ca_certificate_path: string | null;
 }
 
 export interface Settings {
@@ -64,6 +67,7 @@ export function useSettings() {
     apiKey: string,
     model: string,
     timeoutSeconds: number,
+    caCertificatePath: string | null,
   ) {
     const updated = await invoke<Settings>("set_ai_connection", {
       provider,
@@ -71,6 +75,7 @@ export function useSettings() {
       apiKey,
       model,
       timeoutSeconds,
+      caCertificatePath,
     });
     setSettings(updated);
   }

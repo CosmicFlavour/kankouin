@@ -10,6 +10,7 @@ const connection = {
   api_key: "sk-test",
   model: "sonnet-5",
   timeout_seconds: 90,
+  ca_certificate_path: null,
 };
 
 function renderDialog(
@@ -56,6 +57,7 @@ describe("AIConnectionDialog", () => {
       "sk-test",
       "sonnet-5",
       120,
+      null,
     );
   });
 
@@ -76,6 +78,7 @@ describe("AIConnectionDialog", () => {
       "",
       "model",
       45,
+      null,
     );
   });
 
@@ -171,6 +174,7 @@ describe("AIConnectionDialog", () => {
       apiKey: connection.api_key,
       model: connection.model,
       timeoutSeconds: connection.timeout_seconds,
+      caCertificatePath: null,
     });
   });
 

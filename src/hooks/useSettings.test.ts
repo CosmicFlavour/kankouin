@@ -134,6 +134,7 @@ describe("useSettings", () => {
         "sk-test",
         "sonnet-5",
         90,
+        null,
       );
     });
 
@@ -144,6 +145,7 @@ describe("useSettings", () => {
       apiKey: "sk-test",
       model: "sonnet-5",
       timeoutSeconds: 90,
+      caCertificatePath: null,
     });
   });
 
