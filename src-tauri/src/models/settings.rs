@@ -17,6 +17,15 @@ pub struct Settings {
     /// (unlike `CloudSync.passphrase`, which is deliberately never round-
     /// tripped back to the frontend).
     pub ai_connection: Option<AIConnection>,
+    /// User override for the AI assistant's system prompt. Deliberately a
+    /// sibling of `ai_connection`, not a field on it — it's a behavior
+    /// setting, not transport config, so clearing or reconfiguring the
+    /// connection must not lose it. `None` means "use whichever built-in
+    /// default ships with the running app version" (see
+    /// `ai::DEFAULT_SYSTEM_PROMPT` / `ai::effective_system_prompt`) — that's
+    /// how a user who never customizes it gets prompt improvements for
+    /// free on every update, with no migration required.
+    pub ai_system_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

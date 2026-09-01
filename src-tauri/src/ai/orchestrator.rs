@@ -89,9 +89,18 @@ impl AIChatOrchestrator {
         tools: &[ToolDefinition],
         ctx: &ToolContext,
         db: &AppState,
+        system_prompt: &str,
         user_message: String,
     ) -> AppResult<ChatTurnResult> {
         let mut history = self.history.lock().map_err(|_| AppError::Lock)?;
+
+        // Only at the very start of a conversation — like the context note
+        // below, re-injected after `reset` rather than repeated every turn.
+        // An empty prompt (tests that don't care about this) injects
+        // nothing, same as no context.
+        if history.is_empty() && !system_prompt.is_empty() {
+            history.push(ChatMessage::system(system_prompt.to_string()));
+        }
 
         let current_context = (ctx.project_id.clone(), ctx.workspace_id.clone());
         {
@@ -180,7 +189,15 @@ mod tests {
         let db = test_db();
 
         let result = orchestrator
-            .send_message(&provider, &executor, &[], &ctx, &db, "hello".to_string())
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx,
+                &db,
+                "",
+                "hello".to_string(),
+            )
             .unwrap();
 
         assert_eq!(result.reply, "Mock echo: hello");
@@ -203,6 +220,7 @@ mod tests {
                 &[],
                 &ctx,
                 &db,
+                "",
                 "trigger_tool".to_string(),
             )
             .unwrap();
@@ -250,7 +268,7 @@ mod tests {
         let db = test_db();
 
         let err = orchestrator
-            .send_message(&provider, &executor, &[], &ctx, &db, "go".to_string())
+            .send_message(&provider, &executor, &[], &ctx, &db, "", "go".to_string())
             .unwrap_err();
 
         assert!(matches!(err, AppError::Invalid(_)));
@@ -271,7 +289,15 @@ mod tests {
         let db = test_db();
 
         orchestrator
-            .send_message(&provider, &executor, &[], &ctx, &db, "hello".to_string())
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx,
+                &db,
+                "",
+                "hello".to_string(),
+            )
             .unwrap();
         assert!(!orchestrator.history.lock().unwrap().is_empty());
 
@@ -281,7 +307,15 @@ mod tests {
         // Same context as before reset — a fresh conversation should
         // re-announce it rather than assuming it's still known.
         orchestrator
-            .send_message(&provider, &executor, &[], &ctx, &db, "hi again".to_string())
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx,
+                &db,
+                "",
+                "hi again".to_string(),
+            )
             .unwrap();
         let history = orchestrator.history.lock().unwrap();
         assert_eq!(history[0].role, ChatRole::System);
@@ -302,7 +336,15 @@ mod tests {
         };
 
         orchestrator
-            .send_message(&provider, &executor, &[], &ctx_a, &db, "first".to_string())
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx_a,
+                &db,
+                "",
+                "first".to_string(),
+            )
             .unwrap();
         {
             let history = orchestrator.history.lock().unwrap();
@@ -316,7 +358,15 @@ mod tests {
         // Same context again — no repeat system message, just the new
         // exchange appended.
         orchestrator
-            .send_message(&provider, &executor, &[], &ctx_a, &db, "second".to_string())
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx_a,
+                &db,
+                "",
+                "second".to_string(),
+            )
             .unwrap();
         {
             let history = orchestrator.history.lock().unwrap();
@@ -330,7 +380,15 @@ mod tests {
             ..ctx_a.clone()
         };
         orchestrator
-            .send_message(&provider, &executor, &[], &ctx_b, &db, "third".to_string())
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx_b,
+                &db,
+                "",
+                "third".to_string(),
+            )
             .unwrap();
         let history = orchestrator.history.lock().unwrap();
         assert_eq!(history.len(), 8);
@@ -347,12 +405,105 @@ mod tests {
         let db = test_db();
 
         orchestrator
-            .send_message(&provider, &executor, &[], &ctx, &db, "hello".to_string())
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx,
+                &db,
+                "",
+                "hello".to_string(),
+            )
             .unwrap();
 
         let history = orchestrator.history.lock().unwrap();
         assert_eq!(history.len(), 2);
         assert!(history.iter().all(|m| m.role != ChatRole::System));
+    }
+
+    #[test]
+    fn injects_the_system_prompt_once_at_the_start_of_the_conversation() {
+        let orchestrator = AIChatOrchestrator::new();
+        let provider = MockAIProvider;
+        let executor = MockToolExecutor;
+        let ctx = ToolContext::default();
+        let db = test_db();
+
+        orchestrator
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx,
+                &db,
+                "You are a helpful board assistant.",
+                "hello".to_string(),
+            )
+            .unwrap();
+        {
+            let history = orchestrator.history.lock().unwrap();
+            assert_eq!(history.len(), 3);
+            assert_eq!(history[0].role, ChatRole::System);
+            assert_eq!(history[0].content, "You are a helpful board assistant.");
+        }
+
+        // A later turn in the same conversation doesn't repeat it.
+        orchestrator
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx,
+                &db,
+                "You are a helpful board assistant.",
+                "again".to_string(),
+            )
+            .unwrap();
+        let history = orchestrator.history.lock().unwrap();
+        assert_eq!(
+            history
+                .iter()
+                .filter(|m| m.role == ChatRole::System)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn re_injects_the_system_prompt_after_reset() {
+        let orchestrator = AIChatOrchestrator::new();
+        let provider = MockAIProvider;
+        let executor = MockToolExecutor;
+        let ctx = ToolContext::default();
+        let db = test_db();
+
+        orchestrator
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx,
+                &db,
+                "be nice",
+                "hi".to_string(),
+            )
+            .unwrap();
+        orchestrator.reset().unwrap();
+        orchestrator
+            .send_message(
+                &provider,
+                &executor,
+                &[],
+                &ctx,
+                &db,
+                "be nice",
+                "hi again".to_string(),
+            )
+            .unwrap();
+
+        let history = orchestrator.history.lock().unwrap();
+        assert_eq!(history[0].role, ChatRole::System);
+        assert_eq!(history[0].content, "be nice");
     }
 
     struct LoggingToolExecutor;
@@ -393,6 +544,7 @@ mod tests {
                 &[],
                 &ctx,
                 &db,
+                "",
                 "trigger_tool".to_string(),
             )
             .unwrap();

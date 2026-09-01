@@ -18,7 +18,9 @@ pub fn chat_with_ai(
     workspace_name: Option<String>,
 ) -> AppResult<ai::ChatTurnResult> {
     let config_dir = app.path().app_config_dir()?;
-    let provider = ai::resolve_provider(&settings::read(&config_dir))?;
+    let settings = settings::read(&config_dir);
+    let provider = ai::resolve_provider(&settings)?;
+    let system_prompt = ai::effective_system_prompt(&settings);
     let ctx = ToolContext {
         project_id,
         workspace_id,
@@ -31,8 +33,19 @@ pub fn chat_with_ai(
         &registry::toolbox(),
         &ctx,
         db.inner(),
+        system_prompt,
         message,
     )
+}
+
+/// The built-in default system prompt, for the settings UI to show as
+/// reference/placeholder text next to the user's override field — kept as
+/// a separate command rather than a `Settings` field so it's never
+/// accidentally persisted into `settings.json` (see
+/// `Settings::ai_system_prompt`'s doc comment).
+#[tauri::command]
+pub fn get_default_ai_system_prompt() -> &'static str {
+    ai::DEFAULT_SYSTEM_PROMPT
 }
 
 /// The "New conversation" button — clears the in-memory transcript. Does

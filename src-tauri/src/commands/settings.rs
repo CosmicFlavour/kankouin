@@ -101,6 +101,18 @@ pub(crate) fn remove_ai_connection(config_dir: &Path) -> AppResult<Settings> {
     Ok(settings)
 }
 
+// Blank input is treated the same as `None` — an emptied textarea in the
+// settings UI means "reset to default", not "store an empty prompt".
+pub(crate) fn save_ai_system_prompt(
+    config_dir: &Path,
+    prompt: Option<String>,
+) -> AppResult<Settings> {
+    let mut settings = read(config_dir);
+    settings.ai_system_prompt = prompt.filter(|p| !p.trim().is_empty());
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
 fn save_theme(config_dir: &Path, theme: String) -> AppResult<Settings> {
     if !VALID_THEMES.contains(&theme.as_str()) {
         return Err(AppError::Invalid(format!(
@@ -159,6 +171,12 @@ pub fn set_ai_connection(
 pub fn clear_ai_connection(app: AppHandle) -> AppResult<Settings> {
     let config_dir = app.path().app_config_dir()?;
     remove_ai_connection(&config_dir)
+}
+
+#[tauri::command]
+pub fn set_ai_system_prompt(app: AppHandle, prompt: Option<String>) -> AppResult<Settings> {
+    let config_dir = app.path().app_config_dir()?;
+    save_ai_system_prompt(&config_dir, prompt)
 }
 
 #[cfg(test)]
@@ -252,6 +270,40 @@ mod tests {
         let cleared = clear_cloud_sync(dir.path()).unwrap();
         assert_eq!(cleared.cloud_sync, None);
         assert_eq!(read(dir.path()).cloud_sync, None);
+    }
+
+    #[test]
+    fn ai_system_prompt_round_trips_and_does_not_clobber_the_connection() {
+        let dir = tempfile::tempdir().unwrap();
+        let connection = AIConnection {
+            provider: "openwebui".into(),
+            base_url: "https://openwebui.example.com".into(),
+            api_key: "sk-test".into(),
+            model: "sonnet-5".into(),
+            timeout_seconds: 120,
+            ca_certificate_path: None,
+        };
+        save_ai_connection(dir.path(), connection.clone()).unwrap();
+
+        let written = save_ai_system_prompt(dir.path(), Some("Be terse.".into())).unwrap();
+        assert_eq!(written.ai_system_prompt.as_deref(), Some("Be terse."));
+        assert_eq!(written.ai_connection, Some(connection));
+
+        let read_back = read(dir.path());
+        assert_eq!(read_back.ai_system_prompt.as_deref(), Some("Be terse."));
+    }
+
+    #[test]
+    fn ai_system_prompt_of_none_or_blank_resets_to_the_default() {
+        let dir = tempfile::tempdir().unwrap();
+        save_ai_system_prompt(dir.path(), Some("custom".into())).unwrap();
+
+        let cleared = save_ai_system_prompt(dir.path(), None).unwrap();
+        assert_eq!(cleared.ai_system_prompt, None);
+
+        save_ai_system_prompt(dir.path(), Some("custom again".into())).unwrap();
+        let blanked = save_ai_system_prompt(dir.path(), Some("   ".into())).unwrap();
+        assert_eq!(blanked.ai_system_prompt, None);
     }
 
     #[test]
