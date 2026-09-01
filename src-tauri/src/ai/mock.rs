@@ -21,6 +21,14 @@ impl AIProvider for MockAIProvider {
     }
 
     fn send(&self, messages: &[ChatMessage], _tools: &[ToolDefinition]) -> AppResult<AIResponse> {
+        // Simulates real backend latency so loading states (spinner,
+        // auto-scroll, disabled send button) are actually visible when
+        // manually testing against the mock provider. Skipped under
+        // `cargo test`, which calls this dozens of times and doesn't need
+        // to wait around for it.
+        #[cfg(not(test))]
+        std::thread::sleep(std::time::Duration::from_millis(900));
+
         let last = messages
             .last()
             .ok_or_else(|| AppError::Invalid("no messages to respond to".into()))?;
