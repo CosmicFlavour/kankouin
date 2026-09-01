@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   Dialog,
   DialogContent,
@@ -104,7 +104,7 @@ export function AIConnectionDialog({
   }
 
   async function handleBrowseCaCert() {
-    const path = await open({ multiple: false, filters: CA_CERT_FILTERS });
+    const path = await openFileDialog({ multiple: false, filters: CA_CERT_FILTERS });
     if (!path || Array.isArray(path)) return;
     updateField(setCaCertPath)(path);
   }
