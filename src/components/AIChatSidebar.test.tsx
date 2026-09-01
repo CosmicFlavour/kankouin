@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AIChatSidebar } from "./AIChatSidebar";
 import { mockInvoke, mockCommands } from "@/test/tauriMock";
@@ -251,6 +251,76 @@ describe("AIChatSidebar", () => {
     expect(
       screen.queryByRole("button", { name: "Revert" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the input editable and shows a spinner while a reply is pending", async () => {
+    const user = userEvent.setup();
+    let resolveReply!: (value: { reply: string; actions: never[] }) => void;
+    mockBackend({
+      chat_with_ai: () =>
+        new Promise((resolve) => {
+          resolveReply = resolve;
+        }),
+    });
+    renderSidebar();
+
+    const textarea = screen.getByPlaceholderText("Message the AI assistant…");
+    await user.type(textarea, "first message");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    // The user's own message shows up immediately, without waiting on the reply.
+    expect(screen.getByText("first message")).toBeInTheDocument();
+    expect(screen.getByText(/thinking/i)).toBeInTheDocument();
+
+    // The textarea is free again, so the user can queue up their next message.
+    expect(textarea).not.toBeDisabled();
+    await user.type(textarea, "queued while waiting");
+    expect(textarea).toHaveValue("queued while waiting");
+
+    // The send button stays disabled until the current turn resolves, so
+    // there's no double-send race.
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+
+    resolveReply({ reply: "done", actions: [] });
+    await screen.findByText("done");
+    expect(screen.queryByText(/thinking/i)).not.toBeInTheDocument();
+  });
+
+  it("resizes when the drag handle is dragged", async () => {
+    mockBackend();
+    const { container } = render(
+      <AIChatSidebar
+        open
+        projectId="project-1"
+        workspaceId="workspace-1"
+        projectName="Website Redesign"
+        workspaceName="Personal"
+        onMutation={() => {}}
+      />,
+    );
+
+    const aside = container.querySelector("aside")!;
+    const handle = aside.firstElementChild as HTMLElement;
+    const initialWidth = aside.style.width;
+
+    // The drag-move listener is wired up from an effect, so the "isResizing"
+    // state update from pointerdown needs to commit before pointermove does
+    // anything.
+    await act(async () => {
+      handle.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, clientX: 500 }),
+      );
+    });
+    await act(async () => {
+      document.dispatchEvent(
+        new PointerEvent("pointermove", { bubbles: true, clientX: 300 }),
+      );
+    });
+    await act(async () => {
+      document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    });
+
+    expect(aside.style.width).not.toBe(initialWidth);
   });
 
   it("does not show a revert button for a non-revertible action", async () => {

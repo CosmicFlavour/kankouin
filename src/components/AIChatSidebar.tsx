@@ -1,5 +1,5 @@
-import { Fragment, useState } from "react";
-import { PlusIcon, SendIcon, SettingsIcon } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { Loader2Icon, PlusIcon, SendIcon, SettingsIcon } from "lucide-react";
 import { useAIChat, type AiActionLogEntry } from "@/hooks/useAIChat";
 import { useSettings } from "@/hooks/useSettings";
 import { AIConnectionDialog } from "@/components/AIConnectionDialog";
@@ -14,6 +14,23 @@ interface AIChatSidebarProps {
   projectName: string | null;
   workspaceName: string | null;
   onMutation: () => void;
+}
+
+const MIN_WIDTH = 280;
+const MAX_WIDTH = 720;
+const DEFAULT_WIDTH = 384;
+const WIDTH_STORAGE_KEY = "kankouin.aiSidebar.width";
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getStoredWidth() {
+  const raw = localStorage.getItem(WIDTH_STORAGE_KEY);
+  const parsed = raw ? Number(raw) : NaN;
+  return Number.isFinite(parsed)
+    ? clamp(parsed, MIN_WIDTH, MAX_WIDTH)
+    : DEFAULT_WIDTH;
 }
 
 function ActionsTrail({
@@ -80,6 +97,10 @@ export function AIChatSidebar({
   } = useAIChat(projectId, workspaceId, projectName, workspaceName, onMutation);
   const { settings, setAiConnection, clearAiConnection } = useSettings();
   const [draft, setDraft] = useState("");
+  const [width, setWidth] = useState(getStoredWidth);
+  const [isResizing, setIsResizing] = useState(false);
+  const widthRef = useRef(width);
+  widthRef.current = width;
 
   async function handleSend() {
     if (!draft.trim() || loading) return;
@@ -95,14 +116,46 @@ export function AIChatSidebar({
     }
   }
 
+  // The panel is pinned to the right edge of the window, so its width is
+  // just the distance from the pointer to that edge — no need to track
+  // drag deltas relative to the handle's starting position.
+  useEffect(() => {
+    if (!isResizing) return;
+
+    function handlePointerMove(e: PointerEvent) {
+      setWidth(clamp(window.innerWidth - e.clientX, MIN_WIDTH, MAX_WIDTH));
+    }
+    function handlePointerUp() {
+      setIsResizing(false);
+      localStorage.setItem(WIDTH_STORAGE_KEY, String(widthRef.current));
+    }
+
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isResizing]);
+
   return (
     <aside
+      style={{ width: open ? width : 0 }}
       className={cn(
-        "flex h-screen shrink-0 flex-col overflow-hidden border-l bg-muted/20 transition-[width]",
-        open ? "w-96" : "w-0",
+        "flex h-screen shrink-0 overflow-hidden border-l bg-muted/20",
+        !isResizing && "transition-[width]",
       )}
     >
-      <div className="flex min-w-96 flex-1 flex-col gap-3 p-4">
+      {open && (
+        <div
+          onPointerDown={(e) => {
+            e.preventDefault();
+            setIsResizing(true);
+          }}
+          className="w-1 shrink-0 cursor-col-resize hover:bg-primary/50 active:bg-primary/70"
+        />
+      )}
+      <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">AI Assistant</h2>
           <div className="flex items-center gap-1">
@@ -157,7 +210,8 @@ export function AIChatSidebar({
             </Fragment>
           ))}
           {loading && (
-            <p className="self-start text-sm text-muted-foreground">
+            <p className="flex items-center gap-2 self-start text-sm text-muted-foreground">
+              <Loader2Icon className="size-3.5 animate-spin" />
               Thinking…
             </p>
           )}
@@ -171,7 +225,6 @@ export function AIChatSidebar({
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Message the AI assistant…"
-            disabled={loading}
             className="min-h-9"
           />
           <Button
