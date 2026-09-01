@@ -274,12 +274,16 @@ function App() {
 
       <AIChatSidebar
         open={aiSidebarOpen}
-        projectId={selectedProjectId}
-        workspaceId={selectedWorkspaceId}
+        projectId={activeView === "workspace" ? selectedProjectId : null}
+        workspaceId={activeView === "workspace" ? selectedWorkspaceId : null}
         projectName={
-          allProjects.find((p) => p.id === selectedProjectId)?.name ?? null
+          activeView === "workspace"
+            ? allProjects.find((p) => p.id === selectedProjectId)?.name ?? null
+            : null
         }
-        workspaceName={selectedWorkspace?.name ?? null}
+        workspaceName={
+          activeView === "workspace" ? selectedWorkspace?.name ?? null : null
+        }
         onMutation={() => setAiRefreshSignal((v) => v + 1)}
       />
 

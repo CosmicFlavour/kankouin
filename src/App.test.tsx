@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { mockCommands } from "@/test/tauriMock";
@@ -192,5 +192,80 @@ describe("App keyboard shortcuts", () => {
     expect(
       screen.queryByRole("heading", { name: "Today / This Week" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("App AI assistant context scoping", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("does not send stale project/workspace context to the AI after navigating away from a project", async () => {
+    const workspace = {
+      id: "ws-1",
+      name: "Personal",
+      color: null,
+      icon: null,
+      created_at: "2026-07-11T00:00:00Z",
+      updated_at: "2026-07-11T00:00:00Z",
+    };
+    const project = {
+      id: "p1",
+      workspace_id: "ws-1",
+      name: "Website relaunch",
+      description: null,
+      archived: false,
+      created_at: "2026-07-11T00:00:00Z",
+      updated_at: "2026-07-11T00:00:00Z",
+    };
+    const chatWithAi = vi.fn(() => ({ reply: "Sure." }));
+    mockBackend({
+      get_stale_tasks: () => [],
+      list_workspaces: () => [workspace],
+      list_projects: () => [project],
+      list_archived_projects: () => [],
+      list_tasks: () => [],
+      list_epics: () => [],
+      list_user_stories: () => [],
+      list_tasks_today: () => [],
+      get_default_ai_system_prompt: () => "You are the default assistant.",
+      chat_with_ai: chatWithAi,
+    });
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByText("Select a workspace to get started");
+    await user.click(screen.getByRole("button", { name: "Personal" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Website relaunch" }),
+    );
+
+    // Navigate away without ever clearing the selection — this is the bug
+    // being fixed: App.tsx must stop forwarding the stale selection once
+    // the workspace view isn't what's actually showing (see the AI
+    // assistant's props on <AIChatSidebar>).
+    await user.click(
+      screen.getByRole("button", { name: "Today / This Week" }),
+    );
+    await screen.findByRole("heading", { name: "Today / This Week" });
+
+    await user.click(
+      screen.getByRole("button", { name: "Toggle AI assistant" }),
+    );
+    await user.type(
+      screen.getByPlaceholderText("Message the AI assistant…"),
+      "what's due this week?",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(chatWithAi).toHaveBeenCalled());
+    expect(chatWithAi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: null,
+        workspaceId: null,
+        projectName: null,
+        workspaceName: null,
+      }),
+    );
   });
 });
