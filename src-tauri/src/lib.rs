@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod cloud;
 pub mod commands;
 mod dates;
@@ -5,6 +6,7 @@ pub mod db;
 pub mod error;
 mod models;
 
+use ai::AiState;
 use db::AppState;
 use std::sync::Mutex;
 use tauri::Manager;
@@ -20,9 +22,17 @@ pub fn run() {
                 db: Mutex::new(conn),
                 db_status: Mutex::new(status),
             });
+            app.manage(AiState::new());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::ai::chat_with_ai,
+            commands::ai::test_ai_connection,
+            commands::ai::reset_ai_conversation,
+            commands::ai::get_default_ai_system_prompt,
+            commands::ai::break_task_into_subtasks,
+            commands::ai_log::revert_ai_action,
+            commands::ai_log::list_ai_actions,
             commands::workspaces::list_workspaces,
             commands::workspaces::create_workspace,
             commands::workspaces::update_workspace,
@@ -64,6 +74,9 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::set_last_sync_file_path,
             commands::settings::set_theme,
+            commands::settings::set_ai_connection,
+            commands::settings::clear_ai_connection,
+            commands::settings::set_ai_system_prompt,
             commands::database::create_database_file,
             commands::database::open_database_file,
             commands::database::get_database_status,

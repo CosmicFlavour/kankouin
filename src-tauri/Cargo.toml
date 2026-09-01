@@ -31,9 +31,17 @@ thiserror = "2"
 aes-gcm = "0.10"
 argon2 = "0.5"
 ureq = { version = "2", features = ["json"] }
+# Direct (not just transitive-via-ureq) because the AI provider builds its own
+# `rustls::ClientConfig` when a connection configures a custom CA certificate.
+rustls = { version = "0.23", features = ["ring"] }
+rustls-pki-types = { version = "1", features = ["std"] }
+webpki-roots = "0.26"
 sha2 = "0.10"
 base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"
+# Generates a throwaway CA + server certificate for the custom-CA TLS
+# round-trip test in ai::openwebui — never used outside `#[cfg(test)]`.
+rcgen = "0.13"
 

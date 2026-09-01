@@ -4,10 +4,12 @@ use std::path::Path;
 use tauri::{AppHandle, Manager};
 
 use crate::error::{AppError, AppResult};
-use crate::models::{CloudSync, Settings};
+use crate::models::{AIConnection, CloudSync, Settings};
 
 const FILE_NAME: &str = "settings.json";
 const VALID_THEMES: [&str; 2] = ["light", "dark"];
+const VALID_AI_PROVIDERS: [&str; 1] = ["openwebui"];
+const MAX_AI_TIMEOUT_SECS: u64 = 600;
 
 /// Reads `settings.json` from `config_dir`. A missing file (first run) or a
 /// corrupted one both fall back to defaults rather than erroring — this is
@@ -64,6 +66,53 @@ pub fn clear_cloud_sync(config_dir: &Path) -> AppResult<Settings> {
     Ok(settings)
 }
 
+pub(crate) fn save_ai_connection(
+    config_dir: &Path,
+    connection: AIConnection,
+) -> AppResult<Settings> {
+    if !VALID_AI_PROVIDERS.contains(&connection.provider.as_str()) {
+        return Err(AppError::Invalid(format!(
+            "invalid AI provider {:?}, expected one of {VALID_AI_PROVIDERS:?}",
+            connection.provider
+        )));
+    }
+    if connection.base_url.trim().is_empty() {
+        return Err(AppError::Invalid("base_url must not be blank".into()));
+    }
+    if connection.model.trim().is_empty() {
+        return Err(AppError::Invalid("model must not be blank".into()));
+    }
+    if connection.timeout_seconds == 0 || connection.timeout_seconds > MAX_AI_TIMEOUT_SECS {
+        return Err(AppError::Invalid(format!(
+            "timeout_seconds must be between 1 and {MAX_AI_TIMEOUT_SECS}"
+        )));
+    }
+
+    let mut settings = read(config_dir);
+    settings.ai_connection = Some(connection);
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
+pub(crate) fn remove_ai_connection(config_dir: &Path) -> AppResult<Settings> {
+    let mut settings = read(config_dir);
+    settings.ai_connection = None;
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
+// Blank input is treated the same as `None` — an emptied textarea in the
+// settings UI means "reset to default", not "store an empty prompt".
+pub(crate) fn save_ai_system_prompt(
+    config_dir: &Path,
+    prompt: Option<String>,
+) -> AppResult<Settings> {
+    let mut settings = read(config_dir);
+    settings.ai_system_prompt = prompt.filter(|p| !p.trim().is_empty());
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
 fn save_theme(config_dir: &Path, theme: String) -> AppResult<Settings> {
     if !VALID_THEMES.contains(&theme.as_str()) {
         return Err(AppError::Invalid(format!(
@@ -92,6 +141,42 @@ pub fn set_last_sync_file_path(app: AppHandle, path: String) -> AppResult<Settin
 pub fn set_theme(app: AppHandle, theme: String) -> AppResult<Settings> {
     let config_dir = app.path().app_config_dir()?;
     save_theme(&config_dir, theme)
+}
+
+#[tauri::command]
+pub fn set_ai_connection(
+    app: AppHandle,
+    provider: String,
+    base_url: String,
+    api_key: String,
+    model: String,
+    timeout_seconds: u64,
+    ca_certificate_path: Option<String>,
+) -> AppResult<Settings> {
+    let config_dir = app.path().app_config_dir()?;
+    save_ai_connection(
+        &config_dir,
+        AIConnection {
+            provider,
+            base_url,
+            api_key,
+            model,
+            timeout_seconds,
+            ca_certificate_path,
+        },
+    )
+}
+
+#[tauri::command]
+pub fn clear_ai_connection(app: AppHandle) -> AppResult<Settings> {
+    let config_dir = app.path().app_config_dir()?;
+    remove_ai_connection(&config_dir)
+}
+
+#[tauri::command]
+pub fn set_ai_system_prompt(app: AppHandle, prompt: Option<String>) -> AppResult<Settings> {
+    let config_dir = app.path().app_config_dir()?;
+    save_ai_system_prompt(&config_dir, prompt)
 }
 
 #[cfg(test)]
@@ -185,6 +270,155 @@ mod tests {
         let cleared = clear_cloud_sync(dir.path()).unwrap();
         assert_eq!(cleared.cloud_sync, None);
         assert_eq!(read(dir.path()).cloud_sync, None);
+    }
+
+    #[test]
+    fn ai_system_prompt_round_trips_and_does_not_clobber_the_connection() {
+        let dir = tempfile::tempdir().unwrap();
+        let connection = AIConnection {
+            provider: "openwebui".into(),
+            base_url: "https://openwebui.example.com".into(),
+            api_key: "sk-test".into(),
+            model: "sonnet-5".into(),
+            timeout_seconds: 120,
+            ca_certificate_path: None,
+        };
+        save_ai_connection(dir.path(), connection.clone()).unwrap();
+
+        let written = save_ai_system_prompt(dir.path(), Some("Be terse.".into())).unwrap();
+        assert_eq!(written.ai_system_prompt.as_deref(), Some("Be terse."));
+        assert_eq!(written.ai_connection, Some(connection));
+
+        let read_back = read(dir.path());
+        assert_eq!(read_back.ai_system_prompt.as_deref(), Some("Be terse."));
+    }
+
+    #[test]
+    fn ai_system_prompt_of_none_or_blank_resets_to_the_default() {
+        let dir = tempfile::tempdir().unwrap();
+        save_ai_system_prompt(dir.path(), Some("custom".into())).unwrap();
+
+        let cleared = save_ai_system_prompt(dir.path(), None).unwrap();
+        assert_eq!(cleared.ai_system_prompt, None);
+
+        save_ai_system_prompt(dir.path(), Some("custom again".into())).unwrap();
+        let blanked = save_ai_system_prompt(dir.path(), Some("   ".into())).unwrap();
+        assert_eq!(blanked.ai_system_prompt, None);
+    }
+
+    #[test]
+    fn ai_connection_round_trips_and_can_be_cleared() {
+        let dir = tempfile::tempdir().unwrap();
+        let connection = AIConnection {
+            provider: "openwebui".into(),
+            base_url: "https://openwebui.example.com".into(),
+            api_key: "sk-test".into(),
+            model: "sonnet-5".into(),
+            timeout_seconds: 90,
+            ca_certificate_path: Some("/etc/ssl/certs/corporate-ca.pem".into()),
+        };
+
+        let written = save_ai_connection(dir.path(), connection.clone()).unwrap();
+        assert_eq!(written.ai_connection, Some(connection.clone()));
+
+        let read_back = read(dir.path());
+        assert_eq!(read_back.ai_connection, Some(connection));
+
+        let cleared = remove_ai_connection(dir.path()).unwrap();
+        assert_eq!(cleared.ai_connection, None);
+        assert_eq!(read(dir.path()).ai_connection, None);
+    }
+
+    #[test]
+    fn ai_connection_rejects_an_unknown_provider() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = save_ai_connection(
+            dir.path(),
+            AIConnection {
+                provider: "some-other-provider".into(),
+                base_url: "https://example.com".into(),
+                api_key: "key".into(),
+                model: "model".into(),
+                timeout_seconds: 120,
+                ca_certificate_path: None,
+            },
+        );
+        assert!(matches!(result, Err(AppError::Invalid(_))));
+    }
+
+    #[test]
+    fn ai_connection_rejects_a_blank_base_url_or_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let blank_url = save_ai_connection(
+            dir.path(),
+            AIConnection {
+                provider: "openwebui".into(),
+                base_url: "  ".into(),
+                api_key: "key".into(),
+                model: "model".into(),
+                timeout_seconds: 120,
+                ca_certificate_path: None,
+            },
+        );
+        assert!(matches!(blank_url, Err(AppError::Invalid(_))));
+
+        let blank_model = save_ai_connection(
+            dir.path(),
+            AIConnection {
+                provider: "openwebui".into(),
+                base_url: "https://example.com".into(),
+                api_key: "key".into(),
+                model: "".into(),
+                timeout_seconds: 120,
+                ca_certificate_path: None,
+            },
+        );
+        assert!(matches!(blank_model, Err(AppError::Invalid(_))));
+    }
+
+    #[test]
+    fn ai_connection_rejects_a_zero_or_excessive_timeout() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = AIConnection {
+            provider: "openwebui".into(),
+            base_url: "https://example.com".into(),
+            api_key: "key".into(),
+            model: "model".into(),
+            timeout_seconds: 0,
+            ca_certificate_path: None,
+        };
+
+        let zero = save_ai_connection(dir.path(), base.clone());
+        assert!(matches!(zero, Err(AppError::Invalid(_))));
+
+        let too_long = save_ai_connection(
+            dir.path(),
+            AIConnection {
+                timeout_seconds: 601,
+                ..base
+            },
+        );
+        assert!(matches!(too_long, Err(AppError::Invalid(_))));
+    }
+
+    #[test]
+    fn ai_connection_missing_timeout_seconds_in_json_defaults_instead_of_resetting_all_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        // Simulates a settings.json saved before `timeout_seconds` existed.
+        fs::create_dir_all(dir.path()).unwrap();
+        fs::write(
+            dir.path().join(FILE_NAME),
+            r#"{"theme":"dark","ai_connection":{"provider":"openwebui","base_url":"https://x.com","api_key":"k","model":"m"}}"#,
+        )
+        .unwrap();
+
+        let settings = read(dir.path());
+
+        assert_eq!(settings.theme.as_deref(), Some("dark"));
+        assert_eq!(
+            settings.ai_connection.unwrap().timeout_seconds,
+            crate::models::settings::DEFAULT_AI_TIMEOUT_SECS
+        );
     }
 
     #[test]

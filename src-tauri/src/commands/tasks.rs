@@ -95,6 +95,13 @@ fn get_task_row(conn: &Connection, id: &str) -> AppResult<Task> {
     .map_err(not_found_on_no_rows)
 }
 
+/// Fetches a task by id. Thin public wrapper around `get_task_row`, used
+/// by `ai::registry` to snapshot a task's fields before a mutating AI tool
+/// call, so the action can later be reverted via `restore_snapshot`.
+pub(crate) fn get(conn: &Connection, id: &str) -> AppResult<Task> {
+    get_task_row(conn, id)
+}
+
 /// Joins tags and computes the `blocked` flag for a batch of tasks in 2
 /// extra queries total (not per-task), so list views stay O(1) queries
 /// regardless of how many tasks they return.
@@ -173,7 +180,7 @@ fn fetch_blocked_task_ids(conn: &Connection, task_ids: &[String]) -> AppResult<H
     Ok(rows.collect::<Result<HashSet<_>, _>>()?)
 }
 
-fn list(conn: &Connection, project_id: String) -> AppResult<Vec<TaskSummary>> {
+pub(crate) fn list(conn: &Connection, project_id: String) -> AppResult<Vec<TaskSummary>> {
     let sql = format!(
         "SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = ?1 AND archived = 0 ORDER BY created_at ASC"
     );
@@ -225,7 +232,7 @@ pub(crate) fn list_all_active(conn: &Connection) -> AppResult<Vec<TaskSummary>> 
     attach_tags_and_blocked(conn, tasks)
 }
 
-fn get_detail(conn: &Connection, id: String) -> AppResult<TaskDetail> {
+pub(crate) fn get_detail(conn: &Connection, id: String) -> AppResult<TaskDetail> {
     let task = get_task_row(conn, &id)?;
 
     let mut subtask_stmt = conn.prepare(
@@ -321,7 +328,7 @@ pub(crate) fn create(
     })
 }
 
-fn update(
+pub(crate) fn update(
     conn: &Connection,
     id: String,
     title: Option<String>,
@@ -386,7 +393,7 @@ pub(crate) fn update_state(
     get_task_row(conn, &id)
 }
 
-fn apply_deadline(
+pub(crate) fn apply_deadline(
     conn: &Connection,
     id: String,
     deadline_type: String,
@@ -425,11 +432,51 @@ fn apply_deadline(
     get_task_row(conn, &id)
 }
 
+/// Restores every mutable field of a task from a prior snapshot (as
+/// captured by `get` before a revertible AI tool call ran) — one generic
+/// full-row restore shared by every revertible tool
+/// (`archive_task`/`move_task_state`/`set_task_parent`/`update_task`/
+/// `set_deadline` in `ai::registry`), since they all just mutate different
+/// fields of the same row. Last-snapshot-wins: reverting restores exactly
+/// what was captured, even if something else changed the task in between.
+pub(crate) fn restore_snapshot(conn: &Connection, task: &Task) -> AppResult<Task> {
+    let now = Utc::now().to_rfc3339();
+    let changed = conn.execute(
+        "UPDATE tasks
+         SET title = ?2, description = ?3, priority = ?4,
+             epic_id = ?5, user_story_id = ?6,
+             state = ?7, state_since = ?8,
+             deadline_type = ?9, exact_date = ?10, fuzzy_bucket = ?11, bucket_period = ?12,
+             archived = ?13, updated_at = ?14
+         WHERE id = ?1",
+        params![
+            task.id,
+            task.title,
+            task.description,
+            task.priority,
+            task.epic_id,
+            task.user_story_id,
+            task.state,
+            task.state_since,
+            task.deadline_type,
+            task.exact_date,
+            task.fuzzy_bucket,
+            task.bucket_period,
+            task.archived as i64,
+            now,
+        ],
+    )?;
+    if changed == 0 {
+        return Err(AppError::NotFound);
+    }
+    get_task_row(conn, &task.id)
+}
+
 /// Reassigns a task's parent (Project / Epic / User Story). Unlike `update`,
 /// this sets `epic_id`/`user_story_id` directly rather than via `COALESCE`,
 /// since the caller needs to be able to clear either field back to NULL
 /// (e.g. moving a task off a user story back onto the bare project).
-fn set_parent(
+pub(crate) fn set_parent(
     conn: &Connection,
     id: String,
     epic_id: Option<String>,
@@ -446,7 +493,7 @@ fn set_parent(
     get_task_row(conn, &id)
 }
 
-fn archive(conn: &Connection, id: String) -> AppResult<()> {
+pub(crate) fn archive(conn: &Connection, id: String) -> AppResult<()> {
     let now = Utc::now().to_rfc3339();
     let changed = conn.execute(
         "UPDATE tasks SET archived = 1, updated_at = ?2 WHERE id = ?1",
@@ -517,7 +564,7 @@ fn task_due_soon(task: &Task, now: DateTime<Utc>) -> bool {
     }
 }
 
-fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
+pub(crate) fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
     let now = Utc::now();
     let days_from_monday = now.weekday().num_days_from_monday() as i64;
     let end_of_week = (now.date_naive() + Duration::days(6 - days_from_monday))
@@ -541,7 +588,11 @@ fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
     attach_tags_and_blocked(conn, tasks)
 }
 
-fn insert_subtask(conn: &Connection, task_id: String, title: String) -> AppResult<Subtask> {
+pub(crate) fn insert_subtask(
+    conn: &Connection,
+    task_id: String,
+    title: String,
+) -> AppResult<Subtask> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     let sort_order: i64 = conn.query_row(
@@ -938,6 +989,61 @@ mod tests {
         let cleared = set_parent(&conn, task.id, None, None).unwrap();
         assert_eq!(cleared.epic_id, None);
         assert_eq!(cleared.user_story_id, None);
+    }
+
+    #[test]
+    fn restore_snapshot_reverts_every_mutable_field_at_once() {
+        let mut conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = create(
+            &conn,
+            project_id,
+            "Original".into(),
+            Some("original description".into()),
+            None,
+            None,
+            Some("low".into()),
+        )
+        .unwrap();
+        let snapshot = get(&conn, &task.id).unwrap();
+
+        // Mutate several fields the way move_task_state/update/archive
+        // would, independently of each other.
+        update_state(&mut conn, task.id.clone(), "doing".into()).unwrap();
+        update(
+            &conn,
+            task.id.clone(),
+            Some("Changed".into()),
+            Some("changed description".into()),
+            Some("high".into()),
+            None,
+            None,
+        )
+        .unwrap();
+        archive(&conn, task.id.clone()).unwrap();
+
+        let restored = restore_snapshot(&conn, &snapshot).unwrap();
+
+        assert_eq!(restored.title, "Original");
+        assert_eq!(
+            restored.description.as_deref(),
+            Some("original description")
+        );
+        assert_eq!(restored.priority, "low");
+        assert_eq!(restored.state, "todo");
+        assert!(!restored.archived);
+    }
+
+    #[test]
+    fn restore_snapshot_of_a_deleted_task_is_not_found() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        let snapshot = get(&conn, &task.id).unwrap();
+        delete(&conn, task.id).unwrap();
+
+        let result = restore_snapshot(&conn, &snapshot);
+        assert!(matches!(result, Err(AppError::NotFound)));
     }
 
     #[test]

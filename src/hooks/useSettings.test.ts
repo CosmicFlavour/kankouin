@@ -35,6 +35,8 @@ describe("useSettings", () => {
     expect(result.current.settings).toEqual({
       last_sync_file_path: null,
       theme: null,
+      ai_connection: null,
+      ai_system_prompt: null,
     });
   });
 
@@ -100,5 +102,126 @@ describe("useSettings", () => {
     expect(mockInvoke).toHaveBeenCalledWith("set_last_sync_file_path", {
       path: "/data/kankouin.enc",
     });
+  });
+
+  it("setAiConnection updates settings", async () => {
+    const connection = {
+      provider: "openwebui",
+      base_url: "https://openwebui.example.com",
+      api_key: "sk-test",
+      model: "sonnet-5",
+      timeout_seconds: 90,
+    };
+    mockCommands({
+      get_settings: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_connection: null,
+      }),
+      set_ai_connection: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_connection: connection,
+      }),
+    });
+
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.settings.theme).toBe(null));
+
+    await act(async () => {
+      await result.current.setAiConnection(
+        "openwebui",
+        "https://openwebui.example.com",
+        "sk-test",
+        "sonnet-5",
+        90,
+        null,
+      );
+    });
+
+    expect(result.current.settings.ai_connection).toEqual(connection);
+    expect(mockInvoke).toHaveBeenCalledWith("set_ai_connection", {
+      provider: "openwebui",
+      baseUrl: "https://openwebui.example.com",
+      apiKey: "sk-test",
+      model: "sonnet-5",
+      timeoutSeconds: 90,
+      caCertificatePath: null,
+    });
+  });
+
+  it("fetches the default system prompt on mount", async () => {
+    mockCommands({
+      get_settings: () => ({ last_sync_file_path: null, theme: null }),
+      get_default_ai_system_prompt: () => "You are a helpful assistant.",
+    });
+
+    const { result } = renderHook(() => useSettings());
+
+    await waitFor(() =>
+      expect(result.current.defaultAiSystemPrompt).toBe(
+        "You are a helpful assistant.",
+      ),
+    );
+  });
+
+  it("setAiSystemPrompt updates settings", async () => {
+    mockCommands({
+      get_settings: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_system_prompt: null,
+      }),
+      set_ai_system_prompt: (args) => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_system_prompt: args?.prompt,
+      }),
+    });
+
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.settings.theme).toBe(null));
+
+    await act(async () => {
+      await result.current.setAiSystemPrompt("Be terse.");
+    });
+
+    expect(result.current.settings.ai_system_prompt).toBe("Be terse.");
+    expect(mockInvoke).toHaveBeenCalledWith("set_ai_system_prompt", {
+      prompt: "Be terse.",
+    });
+  });
+
+  it("clearAiConnection updates settings", async () => {
+    const connection = {
+      provider: "openwebui",
+      base_url: "https://openwebui.example.com",
+      api_key: "sk-test",
+      model: "sonnet-5",
+    };
+    mockCommands({
+      get_settings: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_connection: connection,
+      }),
+      clear_ai_connection: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_connection: null,
+      }),
+    });
+
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() =>
+      expect(result.current.settings.ai_connection).toEqual(connection),
+    );
+
+    await act(async () => {
+      await result.current.clearAiConnection();
+    });
+
+    expect(result.current.settings.ai_connection).toBeNull();
+    expect(mockInvoke).toHaveBeenCalledWith("clear_ai_connection");
   });
 });

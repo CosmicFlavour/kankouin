@@ -18,7 +18,7 @@ fn row_to_epic(row: &rusqlite::Row) -> rusqlite::Result<Epic> {
     })
 }
 
-fn list(conn: &Connection, project_id: String) -> AppResult<Vec<Epic>> {
+pub(crate) fn list(conn: &Connection, project_id: String) -> AppResult<Vec<Epic>> {
     let mut stmt = conn.prepare(
         "SELECT id, project_id, title, description, created_at, updated_at
          FROM epics WHERE project_id = ?1 ORDER BY created_at ASC",

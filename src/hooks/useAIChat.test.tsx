@@ -1,0 +1,142 @@
+import { describe, it, expect, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { useAIChat } from "./useAIChat";
+import { mockInvoke, mockCommands } from "@/test/tauriMock";
+
+describe("useAIChat", () => {
+  it("sends the message with project/workspace context and appends the reply", async () => {
+    mockCommands({
+      chat_with_ai: () => ({
+        reply: "Sure, I can help with that.",
+      }),
+    });
+
+    const { result } = renderHook(() =>
+      useAIChat("project-1", "workspace-1", "Website Redesign", "Personal"),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("Break this task down");
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("chat_with_ai", {
+      message: "Break this task down",
+      projectId: "project-1",
+      workspaceId: "workspace-1",
+      projectName: "Website Redesign",
+      workspaceName: "Personal",
+    });
+    expect(result.current.messages).toEqual([
+      expect.objectContaining({ role: "user", content: "Break this task down" }),
+      expect.objectContaining({
+        role: "assistant",
+        content: "Sure, I can help with that.",
+      }),
+    ]);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("ignores a blank message", async () => {
+    mockCommands({ chat_with_ai: () => ({ reply: "unused" }) });
+    const { result } = renderHook(() => useAIChat(null, null, null, null));
+
+    await act(async () => {
+      await result.current.sendMessage("   ");
+    });
+
+    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(result.current.messages).toEqual([]);
+  });
+
+  it("surfaces a failure as an error-role chat message, not a separate banner", async () => {
+    mockCommands({
+      chat_with_ai: () => {
+        throw new Error("ai backend unavailable");
+      },
+    });
+    const { result } = renderHook(() =>
+      useAIChat("project-1", "workspace-1", null, null),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("hello");
+    });
+
+    await waitFor(() =>
+      expect(result.current.messages).toEqual([
+        expect.objectContaining({ role: "user", content: "hello" }),
+        expect.objectContaining({
+          role: "error",
+          content: "Error: ai backend unavailable",
+        }),
+      ]),
+    );
+    // `error` is reserved for actions outside the conversation flow (e.g.
+    // resetConversation) — a failed turn is reported in `messages` instead.
+    expect(result.current.error).toBeNull();
+  });
+
+  // A tool call earlier in the same turn can have already mutated the db
+  // before a later step (another tool call, the follow-up provider call,
+  // the orchestrator's iteration cap) fails — so a failed turn is never
+  // proof nothing happened. onMutation must still fire so the board
+  // doesn't go stale relative to what the AI actually did.
+  it("still calls onMutation when the backend call fails", async () => {
+    mockCommands({
+      chat_with_ai: () => {
+        throw new Error("ai backend unavailable");
+      },
+    });
+    const onMutation = vi.fn();
+    const { result } = renderHook(() =>
+      useAIChat("project-1", "workspace-1", null, null, onMutation),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("hello");
+    });
+
+    await waitFor(() =>
+      expect(
+        result.current.messages.some((m) => m.role === "error"),
+      ).toBe(true),
+    );
+    expect(onMutation).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onMutation exactly once after a successful reply", async () => {
+    mockCommands({ chat_with_ai: () => ({ reply: "done" }) });
+    const onMutation = vi.fn();
+    const { result } = renderHook(() =>
+      useAIChat("project-1", "workspace-1", null, null, onMutation),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("add a subtask");
+    });
+
+    expect(onMutation).toHaveBeenCalledTimes(1);
+  });
+
+  it("resetConversation clears the transcript", async () => {
+    mockCommands({
+      chat_with_ai: () => ({ reply: "hi" }),
+      reset_ai_conversation: () => undefined,
+    });
+    const { result } = renderHook(() =>
+      useAIChat("project-1", "workspace-1", null, null),
+    );
+
+    await act(async () => {
+      await result.current.sendMessage("hello");
+    });
+    expect(result.current.messages.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      await result.current.resetConversation();
+    });
+
+    expect(result.current.messages).toEqual([]);
+    expect(mockInvoke).toHaveBeenCalledWith("reset_ai_conversation");
+  });
+});

@@ -67,6 +67,7 @@ function CreateTaskForm({
 
 interface TaskBoardProps {
   projectId: string;
+  refreshKey?: unknown;
   scope: TaskScope;
   onScopeChange: (scope: TaskScope) => void;
   epics: Epic[];
@@ -99,6 +100,7 @@ function taskMatchesScope(
 
 export function TaskBoard({
   projectId,
+  refreshKey = null,
   scope,
   onScopeChange,
   epics,
@@ -112,7 +114,7 @@ export function TaskBoard({
   onCreateUserStory,
   onDeleteUserStory,
 }: TaskBoardProps) {
-  const tasksApi = useTasks(projectId);
+  const tasksApi = useTasks(projectId, refreshKey);
   const {
     tasks: allTasks,
     loading,

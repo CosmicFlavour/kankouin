@@ -31,7 +31,12 @@ export interface TaskSummary extends Task {
   blocked: boolean;
 }
 
-export function useTasks(projectId: string | null) {
+// `refreshKey` exists because this hook is called from more than one place
+// at once with no shared cache — bumping it forces a re-fetch, which is how
+// an AI-driven mutation (via useAIChat, which has no direct handle on this
+// hook's setState) gets reflected here. See useProjects.ts's refreshKey and
+// App.tsx's projectsVersion/aiRefreshSignal.
+export function useTasks(projectId: string | null, refreshKey: unknown = null) {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +65,7 @@ export function useTasks(projectId: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, refreshKey]);
 
   // Exposed so callers outside this hook's own effect (e.g. restoring an
   // archived task, which changes what list_tasks returns from a different

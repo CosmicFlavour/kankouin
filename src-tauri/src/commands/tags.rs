@@ -14,13 +14,13 @@ fn row_to_tag(row: &rusqlite::Row) -> rusqlite::Result<Tag> {
     })
 }
 
-fn list(conn: &Connection) -> AppResult<Vec<Tag>> {
+pub(crate) fn list(conn: &Connection) -> AppResult<Vec<Tag>> {
     let mut stmt = conn.prepare("SELECT id, name, color FROM tags ORDER BY name ASC")?;
     let rows = stmt.query_map([], row_to_tag)?;
     Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-fn create(conn: &Connection, name: String, color: String) -> AppResult<Tag> {
+pub(crate) fn create(conn: &Connection, name: String, color: String) -> AppResult<Tag> {
     let id = Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO tags (id, name, color) VALUES (?1, ?2, ?3)",
@@ -48,7 +48,7 @@ fn delete(conn: &Connection, id: String) -> AppResult<()> {
     Ok(())
 }
 
-fn replace_task_tags(
+pub(crate) fn replace_task_tags(
     conn: &mut Connection,
     task_id: String,
     tag_ids: Vec<String>,

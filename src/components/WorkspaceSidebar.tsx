@@ -1,4 +1,4 @@
-import { PlusIcon } from "lucide-react";
+import { BotIcon, PlusIcon } from "lucide-react";
 import type { Workspace } from "@/hooks/useWorkspaces";
 import { NameDialog } from "@/components/NameDialog";
 import { WorkspaceTreeItem } from "@/components/WorkspaceTreeItem";
@@ -27,6 +27,8 @@ interface WorkspaceSidebarProps {
   staleCount: number;
   onOpenDailyReview: () => void;
   projectsVersion: number;
+  aiSidebarOpen: boolean;
+  onToggleAiSidebar: () => void;
 }
 
 export function WorkspaceSidebar({
@@ -48,6 +50,8 @@ export function WorkspaceSidebar({
   staleCount,
   onOpenDailyReview,
   projectsVersion,
+  aiSidebarOpen,
+  onToggleAiSidebar,
 }: WorkspaceSidebarProps) {
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border p-4">
@@ -56,7 +60,18 @@ export function WorkspaceSidebar({
           <img src="/logo.png" alt="" className="size-6 rounded-md" />
           <h1 className="text-lg font-semibold">Kankouin</h1>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant={aiSidebarOpen ? "secondary" : "ghost"}
+            size="icon-sm"
+            onClick={onToggleAiSidebar}
+          >
+            <BotIcon />
+            <span className="sr-only">Toggle AI assistant</span>
+          </Button>
+          <ThemeToggle />
+        </div>
       </div>
 
       <DatabasePanel />

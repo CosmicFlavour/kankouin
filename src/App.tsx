@@ -5,6 +5,7 @@ import { useAllProjects } from "@/hooks/useAllProjects";
 import { useStaleTasks } from "@/hooks/useStaleTasks";
 import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
+import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { ProjectPanel } from "@/components/ProjectPanel";
 import { TodayView } from "@/components/TodayView";
 import { TagsView } from "@/components/TagsView";
@@ -52,6 +53,11 @@ function App() {
   // instance with no shared cache; bumping this forces both to re-fetch so
   // archiving from one is reflected in the other (see useProjects.ts).
   const [projectsVersion, setProjectsVersion] = useState(0);
+  const [aiSidebarOpen, setAiSidebarOpen] = useState(false);
+  // Bumped after every AI chat reply so the open project's task board
+  // re-fetches (see useTasks.ts's refreshKey) — the AI may have just
+  // created/edited/moved a task via a tool call.
+  const [aiRefreshSignal, setAiRefreshSignal] = useState(0);
 
   const selectedWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId);
   const allProjects = useAllProjects(workspaces, projectsVersion);
@@ -151,6 +157,26 @@ function App() {
   }, []);
 
   useEffect(() => {
+    function handleAiSidebarShortcut(event: KeyboardEvent) {
+      if (event.key.toLowerCase() !== "a") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (document.querySelector('[role="dialog"]')) return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
+        return;
+      }
+
+      event.preventDefault();
+      setAiSidebarOpen((open) => !open);
+    }
+
+    window.addEventListener("keydown", handleAiSidebarShortcut);
+    return () => window.removeEventListener("keydown", handleAiSidebarShortcut);
+  }, []);
+
+  useEffect(() => {
     function handleHelpShortcut(event: KeyboardEvent) {
       if (event.key !== "F1") return;
       if (document.querySelector('[role="dialog"]')) return;
@@ -216,6 +242,8 @@ function App() {
         staleCount={staleTasks.length}
         onOpenDailyReview={() => setDailyReviewOpen(true)}
         projectsVersion={projectsVersion}
+        aiSidebarOpen={aiSidebarOpen}
+        onToggleAiSidebar={() => setAiSidebarOpen((open) => !open)}
       />
       <main className="flex flex-1 flex-col p-6">
         {activeView === "today" && <TodayView />}
@@ -235,6 +263,7 @@ function App() {
           <ProjectPanel
             workspace={selectedWorkspace}
             projectId={selectedProjectId}
+            refreshKey={aiRefreshSignal}
             onArchived={() => {
               setSelectedProjectId(null);
               setProjectsVersion((v) => v + 1);
@@ -242,6 +271,21 @@ function App() {
           />
         )}
       </main>
+
+      <AIChatSidebar
+        open={aiSidebarOpen}
+        projectId={activeView === "workspace" ? selectedProjectId : null}
+        workspaceId={activeView === "workspace" ? selectedWorkspaceId : null}
+        projectName={
+          activeView === "workspace"
+            ? allProjects.find((p) => p.id === selectedProjectId)?.name ?? null
+            : null
+        }
+        workspaceName={
+          activeView === "workspace" ? selectedWorkspace?.name ?? null : null
+        }
+        onMutation={() => setAiRefreshSignal((v) => v + 1)}
+      />
 
       <DailyReviewDialog
         open={dailyReviewOpen}
