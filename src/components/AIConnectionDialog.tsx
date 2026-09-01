@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DEFAULT_AI_TIMEOUT_SECONDS,
   type AIConnection,
@@ -27,6 +28,12 @@ interface AIConnectionDialogProps {
     caCertificatePath: string | null,
   ) => Promise<unknown>;
   onClear: () => Promise<unknown>;
+  // System prompt is a separate setting from the connection (see
+  // `Settings::ai_system_prompt`'s doc comment) with its own save action,
+  // so clearing/reconfiguring the connection above never touches it.
+  systemPrompt: string | null;
+  defaultSystemPrompt: string;
+  onSaveSystemPrompt: (prompt: string | null) => Promise<unknown>;
 }
 
 interface TestResult {
@@ -44,6 +51,9 @@ export function AIConnectionDialog({
   connection,
   onSave,
   onClear,
+  systemPrompt,
+  defaultSystemPrompt,
+  onSaveSystemPrompt,
 }: AIConnectionDialogProps) {
   const [open, setOpen] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
@@ -58,6 +68,10 @@ export function AIConnectionDialog({
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
 
+  const [promptDraft, setPromptDraft] = useState("");
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [promptBusy, setPromptBusy] = useState(false);
+
   // Re-seed the form from the current connection each time the dialog
   // opens, rather than keeping local draft state that could go stale.
   useEffect(() => {
@@ -71,7 +85,9 @@ export function AIConnectionDialog({
     setCaCertPath(connection?.ca_certificate_path ?? "");
     setError(null);
     setTestResult(null);
-  }, [open, connection]);
+    setPromptDraft(systemPrompt ?? "");
+    setPromptError(null);
+  }, [open, connection, systemPrompt]);
 
   // A previous test result stops being trustworthy the moment any of the
   // fields it was based on changes.
@@ -147,6 +163,31 @@ export function AIConnectionDialog({
       setError(String(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleSavePrompt() {
+    setPromptBusy(true);
+    setPromptError(null);
+    try {
+      await onSaveSystemPrompt(promptDraft.trim() || null);
+    } catch (err) {
+      setPromptError(String(err));
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
+  async function handleResetPrompt() {
+    setPromptBusy(true);
+    setPromptError(null);
+    try {
+      await onSaveSystemPrompt(null);
+      setPromptDraft("");
+    } catch (err) {
+      setPromptError(String(err));
+    } finally {
+      setPromptBusy(false);
     }
   }
 
@@ -237,6 +278,38 @@ export function AIConnectionDialog({
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </form>
+
+        <div className="flex flex-col gap-3 border-t pt-3">
+          <p className="text-sm font-medium">System prompt</p>
+          <Textarea
+            value={promptDraft}
+            onChange={(e) => setPromptDraft(e.target.value)}
+            placeholder={defaultSystemPrompt}
+            className="min-h-32 text-xs"
+          />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              onClick={handleSavePrompt}
+              disabled={promptBusy}
+            >
+              Save prompt
+            </Button>
+            {systemPrompt && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleResetPrompt}
+                disabled={promptBusy}
+              >
+                Reset to default
+              </Button>
+            )}
+          </div>
+          {promptError && (
+            <p className="text-sm text-destructive">{promptError}</p>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

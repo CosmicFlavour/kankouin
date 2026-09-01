@@ -12,7 +12,9 @@ function mockBackend(overrides: Record<string, () => unknown> = {}) {
       last_sync_file_path: null,
       theme: null,
       ai_connection: null,
+      ai_system_prompt: null,
     }),
+    get_default_ai_system_prompt: () => "You are the default assistant.",
     ...overrides,
   });
 }

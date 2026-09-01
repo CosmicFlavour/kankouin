@@ -18,6 +18,9 @@ export interface Settings {
   last_sync_file_path: string | null;
   theme: string | null;
   ai_connection: AIConnection | null;
+  // User override for the AI system prompt. null = "use the built-in
+  // default" (see `defaultAiSystemPrompt` below), not "no prompt at all".
+  ai_system_prompt: string | null;
 }
 
 export function useSettings() {
@@ -25,7 +28,13 @@ export function useSettings() {
     last_sync_file_path: null,
     theme: null,
     ai_connection: null,
+    ai_system_prompt: null,
   });
+  // The current app version's built-in system prompt, fetched from the
+  // backend rather than duplicated here so there's one source of truth
+  // (see `ai::DEFAULT_SYSTEM_PROMPT`). Shown in the settings UI as
+  // reference/placeholder text next to the override field.
+  const [defaultAiSystemPrompt, setDefaultAiSystemPrompt] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +46,11 @@ export function useSettings() {
         // Settings are convenience-only; if they can't be loaded (e.g. no
         // Tauri runtime), just keep the empty defaults.
       });
+    invoke<string>("get_default_ai_system_prompt")
+      .then((result) => {
+        if (!cancelled) setDefaultAiSystemPrompt(result);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -85,11 +99,20 @@ export function useSettings() {
     setSettings(updated);
   }
 
+  // `null` (or a blank string — the backend normalizes it) resets to the
+  // built-in default rather than storing an empty prompt.
+  async function setAiSystemPrompt(prompt: string | null) {
+    const updated = await invoke<Settings>("set_ai_system_prompt", { prompt });
+    setSettings(updated);
+  }
+
   return {
     settings,
+    defaultAiSystemPrompt,
     setLastSyncFilePath,
     setTheme,
     setAiConnection,
     clearAiConnection,
+    setAiSystemPrompt,
   };
 }

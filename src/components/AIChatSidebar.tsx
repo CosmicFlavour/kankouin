@@ -95,7 +95,13 @@ export function AIChatSidebar({
     resetConversation,
     revertAction,
   } = useAIChat(projectId, workspaceId, projectName, workspaceName, onMutation);
-  const { settings, setAiConnection, clearAiConnection } = useSettings();
+  const {
+    settings,
+    defaultAiSystemPrompt,
+    setAiConnection,
+    clearAiConnection,
+    setAiSystemPrompt,
+  } = useSettings();
   const [draft, setDraft] = useState("");
   const [width, setWidth] = useState(getStoredWidth);
   const [isResizing, setIsResizing] = useState(false);
@@ -179,6 +185,9 @@ export function AIChatSidebar({
               connection={settings.ai_connection}
               onSave={setAiConnection}
               onClear={clearAiConnection}
+              systemPrompt={settings.ai_system_prompt}
+              defaultSystemPrompt={defaultAiSystemPrompt}
+              onSaveSystemPrompt={setAiSystemPrompt}
             />
           </div>
         </div>

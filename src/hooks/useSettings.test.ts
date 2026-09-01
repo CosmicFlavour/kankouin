@@ -36,6 +36,7 @@ describe("useSettings", () => {
       last_sync_file_path: null,
       theme: null,
       ai_connection: null,
+      ai_system_prompt: null,
     });
   });
 
@@ -146,6 +147,48 @@ describe("useSettings", () => {
       model: "sonnet-5",
       timeoutSeconds: 90,
       caCertificatePath: null,
+    });
+  });
+
+  it("fetches the default system prompt on mount", async () => {
+    mockCommands({
+      get_settings: () => ({ last_sync_file_path: null, theme: null }),
+      get_default_ai_system_prompt: () => "You are a helpful assistant.",
+    });
+
+    const { result } = renderHook(() => useSettings());
+
+    await waitFor(() =>
+      expect(result.current.defaultAiSystemPrompt).toBe(
+        "You are a helpful assistant.",
+      ),
+    );
+  });
+
+  it("setAiSystemPrompt updates settings", async () => {
+    mockCommands({
+      get_settings: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_system_prompt: null,
+      }),
+      set_ai_system_prompt: (args) => ({
+        last_sync_file_path: null,
+        theme: null,
+        ai_system_prompt: args?.prompt,
+      }),
+    });
+
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.settings.theme).toBe(null));
+
+    await act(async () => {
+      await result.current.setAiSystemPrompt("Be terse.");
+    });
+
+    expect(result.current.settings.ai_system_prompt).toBe("Be terse.");
+    expect(mockInvoke).toHaveBeenCalledWith("set_ai_system_prompt", {
+      prompt: "Be terse.",
     });
   });
 

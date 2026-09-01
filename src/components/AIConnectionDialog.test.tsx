@@ -19,6 +19,7 @@ function renderDialog(
   const user = userEvent.setup();
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onClear = vi.fn().mockResolvedValue(undefined);
+  const onSaveSystemPrompt = vi.fn().mockResolvedValue(undefined);
 
   render(
     <AIConnectionDialog
@@ -26,10 +27,13 @@ function renderDialog(
       connection={null}
       onSave={onSave}
       onClear={onClear}
+      systemPrompt={null}
+      defaultSystemPrompt="You are the default assistant."
+      onSaveSystemPrompt={onSaveSystemPrompt}
       {...overrides}
     />,
   );
-  return { user, onSave, onClear };
+  return { user, onSave, onClear, onSaveSystemPrompt };
 }
 
 async function openDialog(user: ReturnType<typeof userEvent.setup>) {
@@ -208,6 +212,74 @@ describe("AIConnectionDialog", () => {
     await user.type(screen.getByPlaceholderText(/model/i), "-changed");
 
     expect(screen.queryByText(/is available/)).not.toBeInTheDocument();
+  });
+
+  it("shows the built-in default prompt as placeholder text when there is no override", async () => {
+    const { user } = renderDialog();
+    await openDialog(user);
+
+    expect(
+      screen.getByPlaceholderText("You are the default assistant."),
+    ).toHaveValue("");
+  });
+
+  it("pre-fills the prompt textarea from an existing override", async () => {
+    const { user } = renderDialog({ systemPrompt: "Be terse." });
+    await openDialog(user);
+
+    expect(
+      screen.getByPlaceholderText("You are the default assistant."),
+    ).toHaveValue("Be terse.");
+  });
+
+  it("saves a custom system prompt", async () => {
+    const { user, onSaveSystemPrompt } = renderDialog();
+    await openDialog(user);
+
+    await user.type(
+      screen.getByPlaceholderText("You are the default assistant."),
+      "Be terse.",
+    );
+    await user.click(screen.getByRole("button", { name: "Save prompt" }));
+
+    expect(onSaveSystemPrompt).toHaveBeenCalledWith("Be terse.");
+  });
+
+  it("does not show a reset button when there is no override", async () => {
+    const { user } = renderDialog({ systemPrompt: null });
+    await openDialog(user);
+
+    expect(
+      screen.queryByRole("button", { name: "Reset to default" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("resets the prompt to the default", async () => {
+    const { user, onSaveSystemPrompt } = renderDialog({
+      systemPrompt: "Be terse.",
+    });
+    await openDialog(user);
+
+    await user.click(screen.getByRole("button", { name: "Reset to default" }));
+
+    expect(onSaveSystemPrompt).toHaveBeenCalledWith(null);
+    expect(
+      screen.getByPlaceholderText("You are the default assistant."),
+    ).toHaveValue("");
+  });
+
+  it("shows an error when saving the system prompt fails", async () => {
+    const onSaveSystemPrompt = vi
+      .fn()
+      .mockRejectedValue(new Error("prompt save failed"));
+    const { user } = renderDialog({ onSaveSystemPrompt });
+    await openDialog(user);
+
+    await user.click(screen.getByRole("button", { name: "Save prompt" }));
+
+    expect(
+      await screen.findByText("Error: prompt save failed"),
+    ).toBeInTheDocument();
   });
 
   it("shows an error when the connection test fails", async () => {
