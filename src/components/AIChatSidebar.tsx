@@ -60,6 +60,17 @@ export function AIChatSidebar({
   const [isResizing, setIsResizing] = useState(false);
   const widthRef = useRef(width);
   widthRef.current = width;
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Without this, a message appended below the fold of a scrolled
+  // conversation is invisible until something else happens to scroll the
+  // container — from the user's perspective indistinguishable from "nothing
+  // happened yet". Fires on `loading` too so the "Thinking…" indicator (and
+  // the just-sent user message above it) is scrolled into view immediately,
+  // not just once the reply lands.
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, loading]);
 
   async function handleSend() {
     if (!draft.trim() || loading) return;
@@ -164,9 +175,12 @@ export function AIChatSidebar({
                   key={message.id}
                   className={cn(
                     "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
-                    message.role === "user"
-                      ? "self-end bg-primary text-primary-foreground"
-                      : "self-start bg-muted text-foreground",
+                    message.role === "user" &&
+                      "self-end bg-primary text-primary-foreground",
+                    message.role === "assistant" &&
+                      "self-start bg-muted text-foreground",
+                    message.role === "error" &&
+                      "self-start border border-destructive/30 bg-destructive/10 text-destructive",
                   )}
                 >
                   {message.content}
@@ -178,6 +192,7 @@ export function AIChatSidebar({
                   Thinking…
                 </p>
               )}
+              <div ref={messagesEndRef} />
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

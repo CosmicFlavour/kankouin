@@ -48,7 +48,7 @@ describe("useAIChat", () => {
     expect(result.current.messages).toEqual([]);
   });
 
-  it("surfaces a failure without appending an assistant message", async () => {
+  it("surfaces a failure as an error-role chat message, not a separate banner", async () => {
     mockCommands({
       chat_with_ai: () => {
         throw new Error("ai backend unavailable");
@@ -63,11 +63,17 @@ describe("useAIChat", () => {
     });
 
     await waitFor(() =>
-      expect(result.current.error).toBe("Error: ai backend unavailable"),
+      expect(result.current.messages).toEqual([
+        expect.objectContaining({ role: "user", content: "hello" }),
+        expect.objectContaining({
+          role: "error",
+          content: "Error: ai backend unavailable",
+        }),
+      ]),
     );
-    expect(result.current.messages).toEqual([
-      expect.objectContaining({ role: "user", content: "hello" }),
-    ]);
+    // `error` is reserved for actions outside the conversation flow (e.g.
+    // resetConversation) — a failed turn is reported in `messages` instead.
+    expect(result.current.error).toBeNull();
   });
 
   // A tool call earlier in the same turn can have already mutated the db
@@ -90,7 +96,11 @@ describe("useAIChat", () => {
       await result.current.sendMessage("hello");
     });
 
-    await waitFor(() => expect(result.current.error).not.toBeNull());
+    await waitFor(() =>
+      expect(
+        result.current.messages.some((m) => m.role === "error"),
+      ).toBe(true),
+    );
     expect(onMutation).toHaveBeenCalledTimes(1);
   });
 

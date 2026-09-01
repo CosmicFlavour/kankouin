@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "error";
   content: string;
 }
 
@@ -50,7 +50,6 @@ export function useAIChat(
       { id: makeId(), role: "user", content: trimmed },
     ]);
     setLoading(true);
-    setError(null);
 
     try {
       const result = await invoke<ChatTurnResult>("chat_with_ai", {
@@ -65,7 +64,13 @@ export function useAIChat(
         { id: makeId(), role: "assistant", content: result.reply },
       ]);
     } catch (err) {
-      setError(String(err));
+      // Shown as a chat bubble (see AIChatSidebar), not a separate banner —
+      // from the user's perspective a failed turn is still part of the
+      // conversation flow, not a distinct kind of event.
+      setMessages((prev) => [
+        ...prev,
+        { id: makeId(), role: "error", content: String(err) },
+      ]);
     } finally {
       setLoading(false);
       onMutation?.();

@@ -102,7 +102,7 @@ describe("AIChatSidebar", () => {
     expect(onMutation).toHaveBeenCalled();
   });
 
-  it("shows an error when the backend call fails", async () => {
+  it("shows a failed turn as a red chat bubble, not a separate banner", async () => {
     const user = userEvent.setup();
     mockBackend({
       chat_with_ai: () => {
@@ -117,9 +117,21 @@ describe("AIChatSidebar", () => {
     );
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
-    expect(
-      await screen.findByText("Error: ai backend unavailable"),
-    ).toBeInTheDocument();
+    const bubble = await screen.findByText("Error: ai backend unavailable");
+    expect(bubble).toBeInTheDocument();
+    expect(bubble.className).toContain("text-destructive");
+    // Sits among the other chat bubbles, not below them in a standalone banner.
+    expect(bubble.parentElement).toBe(bubble.closest(".overflow-y-auto"));
+
+    // The user's message is never lost/stuck behind the error.
+    expect(screen.getByText("hello")).toBeInTheDocument();
+    // Loading resets — the composer is usable again, not stuck. The send
+    // button stays disabled only because the draft is now empty, not
+    // because of a stuck `loading` state.
+    const textarea = screen.getByPlaceholderText("Message the AI assistant…");
+    expect(textarea).not.toBeDisabled();
+    await user.type(textarea, "another try");
+    expect(screen.getByRole("button", { name: "Send message" })).not.toBeDisabled();
   });
 
   it("clears the transcript when New conversation is clicked", async () => {
