@@ -18,6 +18,14 @@ export interface TaskDetail {
   blocked_by: Task[];
 }
 
+// Mirrors the backend's `ai::ChatTurnResult` — `reply` is never shown,
+// only `actions.length` (how many subtasks actually got added) matters
+// to the caller.
+export interface BreakIntoSubtasksResult {
+  reply: string;
+  actions: unknown[];
+}
+
 export function useTaskDetail(taskId: string | null) {
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -74,5 +82,40 @@ export function useTaskDetail(taskId: string | null) {
     );
   }
 
-  return { detail, loading, error, addSubtask, toggleSubtask };
+  async function refresh() {
+    if (!taskId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await invoke<TaskDetail>("get_task", { id: taskId });
+      setDetail(result);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // AI-driven, so unlike `addSubtask` there's nothing to optimistically
+  // patch in — refetch the whole detail to pick up however many subtasks
+  // (zero or more) the AI actually added.
+  async function breakIntoSubtasks() {
+    if (!taskId) throw new Error("no task selected");
+    const result = await invoke<BreakIntoSubtasksResult>(
+      "break_task_into_subtasks",
+      { taskId },
+    );
+    await refresh();
+    return result;
+  }
+
+  return {
+    detail,
+    loading,
+    error,
+    addSubtask,
+    toggleSubtask,
+    refresh,
+    breakIntoSubtasks,
+  };
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SubtaskSection } from "./SubtaskSection";
+import { Toaster } from "./Toaster";
 import { mockInvoke, mockCommands } from "@/test/tauriMock";
 
 const subtask = {
@@ -126,6 +127,65 @@ describe("SubtaskSection", () => {
 
     await waitFor(() => expect(checkbox).toBeChecked());
     expect(mockInvoke).toHaveBeenCalledWith("toggle_subtask", { id: "st1" });
+  });
+
+  it("shows a success toast and refreshes after breaking a task into subtasks", async () => {
+    const user = userEvent.setup();
+    let getTaskCalls = 0;
+    mockCommands({
+      get_task: () => {
+        getTaskCalls += 1;
+        return getTaskCalls === 1
+          ? { task: {}, subtasks: [], tags: [], logs: [], blocked_by: [] }
+          : { task: {}, subtasks: [subtask], tags: [], logs: [], blocked_by: [] };
+      },
+      break_task_into_subtasks: () => ({
+        reply: "Done.",
+        actions: [{ id: "log-1" }, { id: "log-2" }],
+      }),
+    });
+    render(
+      <>
+        <SubtaskSection taskId="t1" />
+        <Toaster />
+      </>,
+    );
+    await screen.findByText("No subtasks yet");
+
+    await user.click(screen.getByRole("button", { name: /break into subtasks/i }));
+
+    expect(await screen.findByText("Task broken into subtasks")).toBeInTheDocument();
+    expect(screen.getByText("2 subtasks added")).toBeInTheDocument();
+    expect(mockInvoke).toHaveBeenCalledWith("break_task_into_subtasks", {
+      taskId: "t1",
+    });
+    expect(await screen.findByText("Write draft")).toBeInTheDocument();
+  });
+
+  it("shows a destructive toast when breaking a task into subtasks fails", async () => {
+    const user = userEvent.setup();
+    mockCommands({
+      get_task: () => ({ task: {}, subtasks: [], tags: [], logs: [], blocked_by: [] }),
+      break_task_into_subtasks: () => {
+        throw new Error("no AI connection configured");
+      },
+    });
+    render(
+      <>
+        <SubtaskSection taskId="t1" />
+        <Toaster />
+      </>,
+    );
+    await screen.findByText("No subtasks yet");
+
+    await user.click(screen.getByRole("button", { name: /break into subtasks/i }));
+
+    expect(
+      await screen.findByText("Couldn't break task into subtasks"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Error: no AI connection configured"),
+    ).toBeInTheDocument();
   });
 
   it("shows an error when toggling a subtask fails", async () => {

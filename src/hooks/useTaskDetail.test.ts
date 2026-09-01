@@ -56,6 +56,63 @@ describe("useTaskDetail", () => {
     });
   });
 
+  it("refresh refetches the detail from the backend", async () => {
+    const updated: TaskDetail = { ...detail, subtasks: [] };
+    mockCommands({
+      get_task: () => updated,
+    });
+
+    const { result } = renderHook(() => useTaskDetail("t1"));
+    await waitFor(() => expect(result.current.detail).toEqual(updated));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("get_task", { id: "t1" });
+  });
+
+  it("breakIntoSubtasks calls the backend then refetches the detail", async () => {
+    const withNewSubtask: TaskDetail = {
+      ...detail,
+      subtasks: [
+        {
+          id: "st1",
+          task_id: "t1",
+          title: "Write draft",
+          done: false,
+          sort_order: 0,
+          created_at: "2026-07-11T00:00:00Z",
+        },
+      ],
+    };
+    let callCount = 0;
+    mockCommands({
+      get_task: () => {
+        callCount += 1;
+        return callCount === 1 ? detail : withNewSubtask;
+      },
+      break_task_into_subtasks: () => ({
+        reply: "Done.",
+        actions: [{ id: "log-1" }],
+      }),
+    });
+
+    const { result } = renderHook(() => useTaskDetail("t1"));
+    await waitFor(() => expect(result.current.detail).toEqual(detail));
+
+    let breakdownResult!: Awaited<ReturnType<typeof result.current.breakIntoSubtasks>>;
+    await act(async () => {
+      breakdownResult = await result.current.breakIntoSubtasks();
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith("break_task_into_subtasks", {
+      taskId: "t1",
+    });
+    expect(breakdownResult.actions).toEqual([{ id: "log-1" }]);
+    expect(result.current.detail).toEqual(withNewSubtask);
+  });
+
   it("toggleSubtask replaces only the matching subtask", async () => {
     const subtaskA = {
       id: "st1",
