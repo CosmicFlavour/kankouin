@@ -10,6 +10,7 @@ const FILE_NAME: &str = "settings.json";
 const VALID_THEMES: [&str; 2] = ["light", "dark"];
 const VALID_AI_PROVIDERS: [&str; 1] = ["openwebui"];
 const MAX_AI_TIMEOUT_SECS: u64 = 600;
+const MAX_FOCUS_REMINDER_MINUTES: u32 = 180;
 
 /// Reads `settings.json` from `config_dir`. A missing file (first run) or a
 /// corrupted one both fall back to defaults rather than erroring — this is
@@ -113,6 +114,26 @@ pub(crate) fn save_ai_system_prompt(
     Ok(settings)
 }
 
+// `None` (the "reset to default" case, e.g. an emptied settings field)
+// skips validation entirely — only an explicit, out-of-range override is
+// rejected.
+pub(crate) fn save_focus_reminder_minutes(
+    config_dir: &Path,
+    minutes: Option<u32>,
+) -> AppResult<Settings> {
+    if let Some(m) = minutes {
+        if m == 0 || m > MAX_FOCUS_REMINDER_MINUTES {
+            return Err(AppError::Invalid(format!(
+                "focus_reminder_minutes must be between 1 and {MAX_FOCUS_REMINDER_MINUTES}"
+            )));
+        }
+    }
+    let mut settings = read(config_dir);
+    settings.focus_reminder_minutes = minutes;
+    write(config_dir, &settings)?;
+    Ok(settings)
+}
+
 fn save_theme(config_dir: &Path, theme: String) -> AppResult<Settings> {
     if !VALID_THEMES.contains(&theme.as_str()) {
         return Err(AppError::Invalid(format!(
@@ -177,6 +198,21 @@ pub fn clear_ai_connection(app: AppHandle) -> AppResult<Settings> {
 pub fn set_ai_system_prompt(app: AppHandle, prompt: Option<String>) -> AppResult<Settings> {
     let config_dir = app.path().app_config_dir()?;
     save_ai_system_prompt(&config_dir, prompt)
+}
+
+#[tauri::command]
+pub fn set_focus_reminder_minutes(app: AppHandle, minutes: Option<u32>) -> AppResult<Settings> {
+    let config_dir = app.path().app_config_dir()?;
+    save_focus_reminder_minutes(&config_dir, minutes)
+}
+
+/// The built-in default reminder interval, for the frontend to use as the
+/// effective value whenever `Settings::focus_reminder_minutes` is `None` —
+/// same shape as `get_default_ai_system_prompt`, one source of truth
+/// instead of a magic number duplicated in TypeScript.
+#[tauri::command]
+pub fn get_default_focus_reminder_minutes() -> u32 {
+    crate::models::settings::DEFAULT_FOCUS_REMINDER_MINUTES
 }
 
 #[cfg(test)]
@@ -419,6 +455,47 @@ mod tests {
             settings.ai_connection.unwrap().timeout_seconds,
             crate::models::settings::DEFAULT_AI_TIMEOUT_SECS
         );
+    }
+
+    #[test]
+    fn focus_reminder_minutes_round_trips_and_can_be_reset_to_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let written = save_focus_reminder_minutes(dir.path(), Some(15)).unwrap();
+        assert_eq!(written.focus_reminder_minutes, Some(15));
+
+        let read_back = read(dir.path());
+        assert_eq!(read_back.focus_reminder_minutes, Some(15));
+
+        let cleared = save_focus_reminder_minutes(dir.path(), None).unwrap();
+        assert_eq!(cleared.focus_reminder_minutes, None);
+    }
+
+    #[test]
+    fn focus_reminder_minutes_rejects_zero_or_excessive_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let zero = save_focus_reminder_minutes(dir.path(), Some(0));
+        assert!(matches!(zero, Err(AppError::Invalid(_))));
+
+        let too_long = save_focus_reminder_minutes(dir.path(), Some(181));
+        assert!(matches!(too_long, Err(AppError::Invalid(_))));
+    }
+
+    #[test]
+    fn focus_reminder_minutes_does_not_clobber_the_ai_connection() {
+        let dir = tempfile::tempdir().unwrap();
+        let connection = AIConnection {
+            provider: "openwebui".into(),
+            base_url: "https://openwebui.example.com".into(),
+            api_key: "sk-test".into(),
+            model: "sonnet-5".into(),
+            timeout_seconds: 120,
+            ca_certificate_path: None,
+        };
+        save_ai_connection(dir.path(), connection.clone()).unwrap();
+
+        let written = save_focus_reminder_minutes(dir.path(), Some(10)).unwrap();
+        assert_eq!(written.focus_reminder_minutes, Some(10));
+        assert_eq!(written.ai_connection, Some(connection));
     }
 
     #[test]

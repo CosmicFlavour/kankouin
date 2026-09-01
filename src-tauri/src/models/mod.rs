@@ -1,5 +1,6 @@
 pub mod ai_log;
 pub mod epic;
+pub mod focus;
 pub mod project;
 pub mod settings;
 pub mod tag;
@@ -9,6 +10,7 @@ pub mod workspace;
 
 pub use ai_log::AiActionLogEntry;
 pub use epic::Epic;
+pub use focus::FocusSession;
 pub use project::Project;
 pub use settings::{AIConnection, CloudSync, Settings};
 pub use tag::Tag;
