@@ -5,12 +5,20 @@ use crate::commands::settings;
 use crate::db::AppState;
 use crate::error::{AppError, AppResult};
 
+// `async` here isn't about awaiting anything inside (the AI/HTTP stack is
+// all blocking `ureq`/`std::sync` code, see `AIProvider::send`'s doc
+// comment) — it's what tells Tauri to dispatch this command via
+// `async_runtime::spawn` onto a background task instead of running it
+// inline on the main thread. Without it, a slow AI backend (or the mock's
+// artificial delay) freezes the entire window — no repaints anywhere, not
+// just this panel — for the whole request, since a plain `fn` command runs
+// on the same thread that drives the webview's event loop.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
-pub fn chat_with_ai(
+pub async fn chat_with_ai(
     app: AppHandle,
-    db: State<AppState>,
-    ai_state: State<AiState>,
+    db: State<'_, AppState>,
+    ai_state: State<'_, AiState>,
     message: String,
     project_id: Option<String>,
     workspace_id: Option<String>,
@@ -42,11 +50,13 @@ pub fn chat_with_ai(
 /// scoped to a single task and a single tool, entirely separate from the
 /// conversational assistant (see `ai::subtask_breakdown` for the actual
 /// prompt/restriction logic).
+// See `chat_with_ai`'s doc comment for why this is `async` despite awaiting
+// nothing — same main-thread-blocking concern applies here.
 #[tauri::command]
-pub fn break_task_into_subtasks(
+pub async fn break_task_into_subtasks(
     app: AppHandle,
-    db: State<AppState>,
-    ai_state: State<AiState>,
+    db: State<'_, AppState>,
+    ai_state: State<'_, AiState>,
     task_id: String,
 ) -> AppResult<ai::ChatTurnResult> {
     let config_dir = app.path().app_config_dir()?;
@@ -80,8 +90,11 @@ pub fn reset_ai_conversation(ai_state: State<AiState>) -> AppResult<()> {
 /// Probes a connection's reachability/auth before it's saved — draft
 /// (not-yet-saved) values from the settings dialog, so this takes them
 /// directly rather than reading `Settings::ai_connection`.
+// Same reasoning as `chat_with_ai`: this makes a real network request
+// (`openwebui::test_connection`), which must not freeze the settings
+// dialog — or the whole window — while it's in flight.
 #[tauri::command]
-pub fn test_ai_connection(
+pub async fn test_ai_connection(
     provider: String,
     base_url: String,
     api_key: String,
