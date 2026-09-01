@@ -3,8 +3,6 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AIChatSidebar } from "./AIChatSidebar";
 import { mockInvoke, mockCommands } from "@/test/tauriMock";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { acceptConfirm } from "@/test/confirmDialog";
 
 function mockBackend(overrides: Record<string, () => unknown> = {}) {
   mockCommands({
@@ -150,39 +148,28 @@ describe("AIChatSidebar", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a collapsible action trail with a working revert button", async () => {
+  it("shows logged actions in the Actions tab with a working revert button", async () => {
     const user = userEvent.setup();
     mockBackend({
-      chat_with_ai: () => ({
-        reply: "Archived it.",
-        actions: [
-          {
-            id: "log-1",
-            tool_name: "archive_task",
-            summary: 'Archived "Fix login bug"',
-            task_id: "task-1",
-            revertible: true,
-            reverted_at: null,
-          },
-        ],
-      }),
+      list_ai_actions: () => [
+        {
+          id: "log-1",
+          tool_name: "archive_task",
+          summary: 'Archived "Fix login bug"',
+          task_id: "task-1",
+          revertible: true,
+          reverted_at: null,
+          created_at: "2024-01-01T00:00:00Z",
+        },
+      ],
       revert_ai_action: () => ({ status: "reverted", task: {} }),
     });
     const { onMutation } = renderSidebar();
 
-    await user.type(
-      screen.getByPlaceholderText("Message the AI assistant…"),
-      "archive it",
-    );
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-    await screen.findByText("Archived it.");
-    onMutation.mockClear();
-
-    // Collapsed by default.
-    expect(screen.queryByText('Archived "Fix login bug"')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "1 action taken" }));
-    expect(screen.getByText('Archived "Fix login bug"')).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Actions" }));
+    expect(
+      await screen.findByText('Archived "Fix login bug"'),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Revert" }));
 
@@ -194,65 +181,6 @@ describe("AIChatSidebar", () => {
       screen.queryByRole("button", { name: "Revert" }),
     ).not.toBeInTheDocument();
     expect(onMutation).toHaveBeenCalled();
-  });
-
-  it("asks for confirmation before reverting an action whose task changed since", async () => {
-    const user = userEvent.setup();
-    mockBackend({
-      chat_with_ai: () => ({
-        reply: "Archived it.",
-        actions: [
-          {
-            id: "log-1",
-            tool_name: "archive_task",
-            summary: 'Archived "Fix login bug"',
-            task_id: "task-1",
-            revertible: true,
-            reverted_at: null,
-          },
-        ],
-      }),
-      revert_ai_action: (args) =>
-        args?.force
-          ? { status: "reverted", task: {} }
-          : { status: "needs_confirmation" },
-    });
-    render(
-      <>
-        <AIChatSidebar
-          open
-          projectId="project-1"
-          workspaceId="workspace-1"
-          projectName="Website Redesign"
-          workspaceName="Personal"
-          onMutation={() => {}}
-        />
-        <ConfirmDialog />
-      </>,
-    );
-
-    await user.type(
-      screen.getByPlaceholderText("Message the AI assistant…"),
-      "archive it",
-    );
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-    await screen.findByText("Archived it.");
-    await user.click(screen.getByRole("button", { name: "1 action taken" }));
-
-    await user.click(screen.getByRole("button", { name: "Revert" }));
-    expect(
-      await screen.findByText(/task changed since this action/i),
-    ).toBeInTheDocument();
-
-    await acceptConfirm(user);
-
-    expect(mockInvoke).toHaveBeenCalledWith("revert_ai_action", {
-      id: "log-1",
-      force: true,
-    });
-    expect(
-      screen.queryByRole("button", { name: "Revert" }),
-    ).not.toBeInTheDocument();
   });
 
   it("keeps the input editable and shows a spinner while a reply is pending", async () => {
@@ -328,34 +256,37 @@ describe("AIChatSidebar", () => {
   it("does not show a revert button for a non-revertible action", async () => {
     const user = userEvent.setup();
     mockBackend({
-      chat_with_ai: () => ({
-        reply: "Created it.",
-        actions: [
-          {
-            id: "log-1",
-            tool_name: "create_task",
-            summary: 'Created task "New"',
-            task_id: "task-1",
-            revertible: false,
-            reverted_at: null,
-          },
-        ],
-      }),
+      list_ai_actions: () => [
+        {
+          id: "log-1",
+          tool_name: "create_task",
+          summary: 'Created task "New"',
+          task_id: "task-1",
+          revertible: false,
+          reverted_at: null,
+          created_at: "2024-01-01T00:00:00Z",
+        },
+      ],
     });
     renderSidebar();
 
-    await user.type(
-      screen.getByPlaceholderText("Message the AI assistant…"),
-      "create a task",
-    );
-    await user.click(screen.getByRole("button", { name: "Send message" }));
-    await screen.findByText("Created it.");
+    await user.click(screen.getByRole("tab", { name: "Actions" }));
 
-    await user.click(screen.getByRole("button", { name: "1 action taken" }));
-
-    expect(screen.getByText('Created task "New"')).toBeInTheDocument();
+    expect(await screen.findByText('Created task "New"')).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Revert" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows a placeholder in the Actions tab when nothing has been logged yet", async () => {
+    const user = userEvent.setup();
+    mockBackend({ list_ai_actions: () => [] });
+    renderSidebar();
+
+    await user.click(screen.getByRole("tab", { name: "Actions" }));
+
+    expect(
+      await screen.findByText(/will show up here/i),
+    ).toBeInTheDocument();
   });
 });

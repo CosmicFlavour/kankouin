@@ -1,31 +1,19 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { confirm } from "@/hooks/useConfirm";
-
-export interface AiActionLogEntry {
-  id: string;
-  tool_name: string;
-  summary: string;
-  task_id: string | null;
-  revertible: boolean;
-  reverted_at: string | null;
-}
 
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  actions?: AiActionLogEntry[];
 }
 
+// The backend also returns `actions` (the turn's logged tool calls), but
+// nothing here needs it — the Actions tab reads the DB-backed log directly
+// via `useAiActionLog` instead, so it isn't scoped to the current
+// in-memory conversation. See that hook's doc comment.
 interface ChatTurnResult {
   reply: string;
-  actions: AiActionLogEntry[];
 }
-
-type RevertOutcome =
-  | { status: "reverted"; task: unknown }
-  | { status: "needs_confirmation" };
 
 let nextId = 0;
 function makeId() {
@@ -74,12 +62,7 @@ export function useAIChat(
       });
       setMessages((prev) => [
         ...prev,
-        {
-          id: makeId(),
-          role: "assistant",
-          content: result.reply,
-          actions: result.actions,
-        },
+        { id: makeId(), role: "assistant", content: result.reply },
       ]);
     } catch (err) {
       setError(String(err));
@@ -102,46 +85,11 @@ export function useAIChat(
     }
   }
 
-  async function revertAction(actionId: string, force = false) {
-    try {
-      const outcome = await invoke<RevertOutcome>("revert_ai_action", {
-        id: actionId,
-        force,
-      });
-
-      if (outcome.status === "needs_confirmation") {
-        const confirmed = await confirm(
-          "This task has been updated since this action was taken. Reverting will overwrite those later changes.",
-          { title: "Task changed since this action?", kind: "warning" },
-        );
-        if (confirmed) await revertAction(actionId, true);
-        return;
-      }
-
-      // Flip the button off immediately rather than waiting on a refetch
-      // that doesn't exist for the action log — the exact timestamp value
-      // doesn't matter, only that it's now truthy.
-      const revertedAt = new Date().toISOString();
-      setMessages((prev) =>
-        prev.map((m) => ({
-          ...m,
-          actions: m.actions?.map((a) =>
-            a.id === actionId ? { ...a, reverted_at: revertedAt } : a,
-          ),
-        })),
-      );
-      onMutation?.();
-    } catch (err) {
-      setError(String(err));
-    }
-  }
-
   return {
     messages,
     sendMessage,
     loading,
     error,
     resetConversation,
-    revertAction,
   };
 }
