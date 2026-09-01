@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
-import { ArchiveIcon, ArchiveRestoreIcon, Trash2Icon } from "lucide-react";
+import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
+  TargetIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { confirm } from "@/hooks/useConfirm";
 import type { Tag, TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
+import { useFocusTask } from "@/hooks/useFocusTask";
 import {
   FUZZY_BUCKETS,
   fuzzyBucketClassName,
@@ -91,6 +97,9 @@ export function TaskDetailPanel({
     task.deadline_type === "exact" ? (task.exact_date ?? "") : "",
   );
   const [parentError, setParentError] = useState<string | null>(null);
+  const { session: focusSession, setFocus, clearFocus } = useFocusTask();
+  const [focusError, setFocusError] = useState<string | null>(null);
+  const isFocused = focusSession?.task.id === task.id;
 
   // Clicking a fuzzy bucket or switching parent selection can change
   // task.deadline_type without remounting this component (same task id), so
@@ -206,6 +215,19 @@ export function TaskDetailPanel({
     await commitExactDate(trimmed);
   }
 
+  async function handleToggleFocus() {
+    setFocusError(null);
+    try {
+      if (isFocused) {
+        await clearFocus();
+      } else {
+        await setFocus(task.id);
+      }
+    } catch (err) {
+      setFocusError(String(err));
+    }
+  }
+
   async function handleArchive() {
     setDangerError(null);
     const confirmed = await confirm(
@@ -256,6 +278,18 @@ export function TaskDetailPanel({
           <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"
+              variant={isFocused ? "default" : "ghost"}
+              size="icon-sm"
+              onClick={handleToggleFocus}
+              title={isFocused ? "Stop focusing" : "Set as focus"}
+            >
+              <TargetIcon />
+              <span className="sr-only">
+                {isFocused ? "Stop focusing" : "Set as focus"}
+              </span>
+            </Button>
+            <Button
+              type="button"
               variant="ghost"
               size="icon-sm"
               onClick={task.archived ? handleUnarchive : handleArchive}
@@ -279,6 +313,7 @@ export function TaskDetailPanel({
         </div>
       </DialogHeader>
       {dangerError && <p className="text-sm text-destructive">{dangerError}</p>}
+      {focusError && <p className="text-sm text-destructive">{focusError}</p>}
 
       <dl className="flex flex-col gap-3 text-sm">
         <div>

@@ -26,16 +26,29 @@ function makeHandlers() {
   };
 }
 
+type CommandHandler = (args?: Record<string, unknown>) => unknown;
+
 function renderPanel(
   taskOverrides: Partial<TaskSummary> = {},
-  { epics = [], userStories = [] }: { epics?: Epic[]; userStories?: UserStory[] } = {},
+  {
+    epics = [],
+    userStories = [],
+    commands = {},
+  }: {
+    epics?: Epic[];
+    userStories?: UserStory[];
+    commands?: Record<string, CommandHandler>;
+  } = {},
 ) {
-  // TaskDetailPanel embeds TagSection (useTags) and SubtaskSection
-  // (useTaskDetail) internally — give both something inert to fetch so they
-  // don't render "couldn't load" noise that could collide with assertions.
+  // TaskDetailPanel embeds TagSection (useTags), SubtaskSection
+  // (useTaskDetail) and its own useFocusTask instance internally — give
+  // each something inert to fetch so they don't render "couldn't load"
+  // noise (or an unrelated focus state) that could collide with assertions.
   mockCommands({
     list_tags: () => [],
     get_task: () => ({ subtasks: [], tags: [], blocked_by: [] }),
+    get_focus_task: () => null,
+    ...commands,
   });
   const task = makeTask({ id: "t1", title: "Ship the thing", ...taskOverrides });
   const handlers = makeHandlers();
@@ -444,5 +457,117 @@ describe("TaskDetailPanel — Apply button", () => {
     expect(handlers.onChangeTitle).not.toHaveBeenCalled();
     expect(handlers.onArchive).not.toHaveBeenCalled();
     expect(handlers.onDelete).not.toHaveBeenCalled();
+  });
+});
+
+describe("TaskDetailPanel — focus", () => {
+  it("offers to set an unfocused task as focus", () => {
+    renderPanel({ id: "t1" }, { commands: { get_focus_task: () => null } });
+
+    expect(
+      screen.getByRole("button", { name: "Set as focus" }),
+    ).toBeInTheDocument();
+  });
+
+  it("sets this task as focus and switches to the stop-focusing state", async () => {
+    const user = userEvent.setup();
+    const setFocusTask = vi.fn().mockReturnValue({
+      task: { id: "t1", title: "Ship the thing" },
+      started_at: "2026-01-01T00:00:00Z",
+    });
+    renderPanel(
+      { id: "t1" },
+      { commands: { get_focus_task: () => null, set_focus_task: setFocusTask } },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Set as focus" }));
+
+    expect(setFocusTask).toHaveBeenCalledWith({ taskId: "t1" });
+    expect(
+      await screen.findByRole("button", { name: "Stop focusing" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows stop-focusing when this task is already the focus", async () => {
+    renderPanel(
+      { id: "t1" },
+      {
+        commands: {
+          get_focus_task: () => ({
+            task: { id: "t1", title: "Ship the thing" },
+            started_at: "2026-01-01T00:00:00Z",
+          }),
+        },
+      },
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Stop focusing" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show stop-focusing for a task that isn't the focused one", () => {
+    renderPanel(
+      { id: "t1" },
+      {
+        commands: {
+          get_focus_task: () => ({
+            task: { id: "some-other-task", title: "Something else" },
+            started_at: "2026-01-01T00:00:00Z",
+          }),
+        },
+      },
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Set as focus" }),
+    ).toBeInTheDocument();
+  });
+
+  it("clears focus when already focused", async () => {
+    const user = userEvent.setup();
+    const clearFocusTask = vi.fn().mockReturnValue(undefined);
+    renderPanel(
+      { id: "t1" },
+      {
+        commands: {
+          get_focus_task: () => ({
+            task: { id: "t1", title: "Ship the thing" },
+            started_at: "2026-01-01T00:00:00Z",
+          }),
+          clear_focus_task: clearFocusTask,
+        },
+      },
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Stop focusing" }),
+    );
+
+    expect(clearFocusTask).toHaveBeenCalled();
+    expect(
+      await screen.findByRole("button", { name: "Set as focus" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an error when toggling focus fails", async () => {
+    const user = userEvent.setup();
+    renderPanel(
+      { id: "t1" },
+      {
+        commands: {
+          get_focus_task: () => null,
+          set_focus_task: () => {
+            throw new Error("no task selected");
+          },
+        },
+      },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Set as focus" }));
+
+    expect(
+      await screen.findByText("Error: no task selected"),
+    ).toBeInTheDocument();
   });
 });
