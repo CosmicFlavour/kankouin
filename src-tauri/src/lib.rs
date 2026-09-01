@@ -16,6 +16,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let (conn, status) = db::resolve_startup_db(app.handle())?;
             app.manage(AppState {
@@ -71,12 +72,18 @@ pub fn run() {
             commands::tasks::add_subtask,
             commands::tasks::toggle_subtask,
             commands::daily_review::get_stale_tasks,
+            commands::focus::set_focus_task,
+            commands::focus::clear_focus_task,
+            commands::focus::get_focus_task,
+            commands::notify::send_desktop_notification,
             commands::settings::get_settings,
             commands::settings::set_last_sync_file_path,
             commands::settings::set_theme,
             commands::settings::set_ai_connection,
             commands::settings::clear_ai_connection,
             commands::settings::set_ai_system_prompt,
+            commands::settings::set_focus_reminder_minutes,
+            commands::settings::get_default_focus_reminder_minutes,
             commands::database::create_database_file,
             commands::database::open_database_file,
             commands::database::get_database_status,

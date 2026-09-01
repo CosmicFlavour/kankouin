@@ -26,7 +26,16 @@ pub struct Settings {
     /// how a user who never customizes it gets prompt improvements for
     /// free on every update, with no migration required.
     pub ai_system_prompt: Option<String>,
+    /// User override for how often (in minutes) a reminder notification
+    /// fires while a task is in focus (see `commands::focus`). `None`
+    /// means the built-in default, `DEFAULT_FOCUS_REMINDER_MINUTES`.
+    pub focus_reminder_minutes: Option<u32>,
 }
+
+/// Default focus-reminder interval, used whenever
+/// `Settings::focus_reminder_minutes` is `None` — i.e. for every user who
+/// hasn't customized it.
+pub const DEFAULT_FOCUS_REMINDER_MINUTES: u32 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CloudSync {

@@ -37,6 +37,7 @@ describe("useSettings", () => {
       theme: null,
       ai_connection: null,
       ai_system_prompt: null,
+      focus_reminder_minutes: null,
     });
   });
 
@@ -189,6 +190,46 @@ describe("useSettings", () => {
     expect(result.current.settings.ai_system_prompt).toBe("Be terse.");
     expect(mockInvoke).toHaveBeenCalledWith("set_ai_system_prompt", {
       prompt: "Be terse.",
+    });
+  });
+
+  it("fetches the default focus reminder interval on mount", async () => {
+    mockCommands({
+      get_settings: () => ({ last_sync_file_path: null, theme: null }),
+      get_default_focus_reminder_minutes: () => 5,
+    });
+
+    const { result } = renderHook(() => useSettings());
+
+    await waitFor(() =>
+      expect(result.current.defaultFocusReminderMinutes).toBe(5),
+    );
+  });
+
+  it("setFocusReminderMinutes updates settings", async () => {
+    mockCommands({
+      get_settings: () => ({
+        last_sync_file_path: null,
+        theme: null,
+        focus_reminder_minutes: null,
+      }),
+      set_focus_reminder_minutes: (args) => ({
+        last_sync_file_path: null,
+        theme: null,
+        focus_reminder_minutes: args?.minutes,
+      }),
+    });
+
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.settings.theme).toBe(null));
+
+    await act(async () => {
+      await result.current.setFocusReminderMinutes(15);
+    });
+
+    expect(result.current.settings.focus_reminder_minutes).toBe(15);
+    expect(mockInvoke).toHaveBeenCalledWith("set_focus_reminder_minutes", {
+      minutes: 15,
     });
   });
 

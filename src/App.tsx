@@ -4,8 +4,12 @@ import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { useAllProjects } from "@/hooks/useAllProjects";
 import { useStaleTasks } from "@/hooks/useStaleTasks";
 import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
+import { useFocusTask } from "@/hooks/useFocusTask";
+import { useFocusReminder } from "@/hooks/useFocusReminder";
+import { useSettings } from "@/hooks/useSettings";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
+import { FocusBanner } from "@/components/FocusBanner";
 import { ProjectPanel } from "@/components/ProjectPanel";
 import { TodayView } from "@/components/TodayView";
 import { TagsView } from "@/components/TagsView";
@@ -38,6 +42,12 @@ function App() {
   } = useWorkspaces();
   const { tasks: staleTasks, loading: staleLoading, refresh: refreshStale } =
     useStaleTasks();
+  const focus = useFocusTask();
+  const { settings, defaultFocusReminderMinutes, setFocusReminderMinutes } =
+    useSettings();
+  const reminderMinutes =
+    settings.focus_reminder_minutes ?? defaultFocusReminderMinutes;
+  useFocusReminder(focus.session, reminderMinutes);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(
     null,
   );
@@ -246,6 +256,12 @@ function App() {
         onToggleAiSidebar={() => setAiSidebarOpen((open) => !open)}
       />
       <main className="flex flex-1 flex-col p-6">
+        <FocusBanner
+          session={focus.session}
+          reminderMinutes={reminderMinutes}
+          onClear={focus.clearFocus}
+          onChangeReminderMinutes={setFocusReminderMinutes}
+        />
         {activeView === "today" && <TodayView />}
         {activeView === "tags" && <TagsView />}
         {activeView === "search" && <SearchView />}

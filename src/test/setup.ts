@@ -21,6 +21,17 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(),
 }));
 
+// useFocusReminder calls these to fire the periodic "stay focused" desktop
+// notification. Defaults to "permission not granted" (the safe default,
+// same philosophy as the dialog mock above) so a test that doesn't care
+// doesn't silently start firing real notifications; a test that does care
+// can override with vi.mocked(isPermissionGranted).mockResolvedValue(true).
+vi.mock("@tauri-apps/plugin-notification", () => ({
+  isPermissionGranted: vi.fn().mockResolvedValue(false),
+  requestPermission: vi.fn().mockResolvedValue("denied"),
+  sendNotification: vi.fn(),
+}));
+
 // jsdom doesn't implement matchMedia; useSettings reads it as the dark-mode
 // fallback when no theme is stored yet. Defaults to "no preference" (light);
 // individual tests can override with vi.spyOn(window, "matchMedia").

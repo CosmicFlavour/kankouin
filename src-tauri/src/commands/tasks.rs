@@ -390,6 +390,12 @@ pub(crate) fn update_state(
         params![id, new_state, now, now],
     )?;
 
+    // A task that's done doesn't need a reminder to stay on it anymore —
+    // see `focus::clear_if_focused`'s doc comment.
+    if new_state == "done" {
+        crate::commands::focus::clear_if_focused(conn, &id)?;
+    }
+
     get_task_row(conn, &id)
 }
 
@@ -502,6 +508,9 @@ pub(crate) fn archive(conn: &Connection, id: String) -> AppResult<()> {
     if changed == 0 {
         return Err(AppError::NotFound);
     }
+    // See `focus::clear_if_focused`'s doc comment: an archived task
+    // shouldn't linger as "in focus".
+    crate::commands::focus::clear_if_focused(conn, &id)?;
     Ok(())
 }
 
@@ -825,6 +834,66 @@ mod tests {
 
         archive(&conn, task.id.clone()).unwrap();
         assert_eq!(list(&conn, project_id).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn archiving_the_focused_task_clears_its_focus_session() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        crate::commands::focus::set(&conn, task.id.clone()).unwrap();
+
+        archive(&conn, task.id).unwrap();
+
+        assert!(crate::commands::focus::get(&conn).unwrap().is_none());
+    }
+
+    #[test]
+    fn archiving_an_unfocused_task_leaves_the_focus_session_alone() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let focused = create(
+            &conn,
+            project_id.clone(),
+            "Focused".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let other = create(&conn, project_id, "Other".into(), None, None, None, None).unwrap();
+        crate::commands::focus::set(&conn, focused.id.clone()).unwrap();
+
+        archive(&conn, other.id).unwrap();
+
+        let session = crate::commands::focus::get(&conn).unwrap().unwrap();
+        assert_eq!(session.task.id, focused.id);
+    }
+
+    #[test]
+    fn moving_the_focused_task_to_done_clears_its_focus_session() {
+        let mut conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        crate::commands::focus::set(&conn, task.id.clone()).unwrap();
+
+        update_state(&mut conn, task.id, "done".into()).unwrap();
+
+        assert!(crate::commands::focus::get(&conn).unwrap().is_none());
+    }
+
+    #[test]
+    fn moving_the_focused_task_to_a_non_done_state_leaves_it_focused() {
+        let mut conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        crate::commands::focus::set(&conn, task.id.clone()).unwrap();
+
+        update_state(&mut conn, task.id.clone(), "doing".into()).unwrap();
+
+        let session = crate::commands::focus::get(&conn).unwrap().unwrap();
+        assert_eq!(session.task.id, task.id);
     }
 
     #[test]

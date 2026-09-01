@@ -21,6 +21,9 @@ export interface Settings {
   // User override for the AI system prompt. null = "use the built-in
   // default" (see `defaultAiSystemPrompt` below), not "no prompt at all".
   ai_system_prompt: string | null;
+  // User override for the focus-reminder interval, in minutes. null = "use
+  // the built-in default" (see `defaultFocusReminderMinutes` below).
+  focus_reminder_minutes: number | null;
 }
 
 export function useSettings() {
@@ -29,12 +32,17 @@ export function useSettings() {
     theme: null,
     ai_connection: null,
     ai_system_prompt: null,
+    focus_reminder_minutes: null,
   });
   // The current app version's built-in system prompt, fetched from the
   // backend rather than duplicated here so there's one source of truth
   // (see `ai::DEFAULT_SYSTEM_PROMPT`). Shown in the settings UI as
   // reference/placeholder text next to the override field.
   const [defaultAiSystemPrompt, setDefaultAiSystemPrompt] = useState("");
+  // Same reasoning as above, for the focus-reminder interval (see
+  // `DEFAULT_FOCUS_REMINDER_MINUTES`).
+  const [defaultFocusReminderMinutes, setDefaultFocusReminderMinutes] =
+    useState(5);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +57,11 @@ export function useSettings() {
     invoke<string>("get_default_ai_system_prompt")
       .then((result) => {
         if (!cancelled) setDefaultAiSystemPrompt(result);
+      })
+      .catch(() => {});
+    invoke<number>("get_default_focus_reminder_minutes")
+      .then((result) => {
+        if (!cancelled) setDefaultFocusReminderMinutes(result);
       })
       .catch(() => {});
     return () => {
@@ -106,13 +119,23 @@ export function useSettings() {
     setSettings(updated);
   }
 
+  // `null` resets to the built-in default (see `defaultFocusReminderMinutes`).
+  async function setFocusReminderMinutes(minutes: number | null) {
+    const updated = await invoke<Settings>("set_focus_reminder_minutes", {
+      minutes,
+    });
+    setSettings(updated);
+  }
+
   return {
     settings,
     defaultAiSystemPrompt,
+    defaultFocusReminderMinutes,
     setLastSyncFilePath,
     setTheme,
     setAiConnection,
     clearAiConnection,
     setAiSystemPrompt,
+    setFocusReminderMinutes,
   };
 }
