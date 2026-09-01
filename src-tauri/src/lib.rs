@@ -31,6 +31,7 @@ pub fn run() {
             commands::ai::reset_ai_conversation,
             commands::ai::get_default_ai_system_prompt,
             commands::ai_log::revert_ai_action,
+            commands::ai_log::list_ai_actions,
             commands::workspaces::list_workspaces,
             commands::workspaces::create_workspace,
             commands::workspaces::update_workspace,

@@ -44,7 +44,34 @@ pub(crate) fn record(
         task_id,
         revertible: before_state.is_some(),
         reverted_at: None,
+        created_at: now,
     })
+}
+
+/// Most recent logged actions across *every* conversation, newest first —
+/// unlike `ChatTurnResult.actions` (one turn's worth, from the caller's own
+/// tool calls), this backs the standalone Actions tab, so it must survive
+/// "New conversation" resets and app restarts. Capped rather than
+/// unbounded since the table only grows.
+const LIST_LIMIT: i64 = 50;
+
+pub(crate) fn list_recent(conn: &Connection) -> AppResult<Vec<AiActionLogEntry>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, tool_name, summary, task_id, before_state IS NOT NULL, reverted_at, created_at
+         FROM ai_action_log ORDER BY created_at DESC LIMIT ?1",
+    )?;
+    let rows = stmt.query_map(params![LIST_LIMIT], |row| {
+        Ok(AiActionLogEntry {
+            id: row.get(0)?,
+            tool_name: row.get(1)?,
+            summary: row.get(2)?,
+            task_id: row.get(3)?,
+            revertible: row.get(4)?,
+            reverted_at: row.get(5)?,
+            created_at: row.get(6)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
 /// What `revert` did. `NeedsConfirmation` isn't an error — it's a normal
@@ -120,6 +147,12 @@ pub fn revert_ai_action(
 ) -> AppResult<RevertOutcome> {
     let conn = state.conn()?;
     revert(&conn, id, force)
+}
+
+#[tauri::command]
+pub fn list_ai_actions(state: State<AppState>) -> AppResult<Vec<AiActionLogEntry>> {
+    let conn = state.conn()?;
+    list_recent(&conn)
 }
 
 #[cfg(test)]
@@ -308,5 +341,71 @@ mod tests {
             RevertOutcome::Reverted { task } => assert_eq!(task.title, "T"),
             RevertOutcome::NeedsConfirmation => panic!("force should bypass the check"),
         }
+    }
+
+    #[test]
+    fn list_recent_returns_newest_first_regardless_of_which_conversation_logged_them() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = tasks::create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        let before = tasks::get(&conn, &task.id).unwrap();
+
+        // Two entries "from" different, unrelated conversations — `list_recent`
+        // has no notion of a conversation, it's a pure DB read.
+        let first = record(
+            &conn,
+            "create_task",
+            &json!({}),
+            "Created \"T\"".into(),
+            Some(task.id.clone()),
+            None,
+        )
+        .unwrap();
+        let second = record(
+            &conn,
+            "archive_task",
+            &json!({ "id": task.id }),
+            "Archived \"T\"".into(),
+            Some(task.id.clone()),
+            Some(&before),
+        )
+        .unwrap();
+
+        let entries = list_recent(&conn).unwrap();
+        assert_eq!(entries.len(), 2);
+        // Newest (second) first.
+        assert_eq!(entries[0].id, second.id);
+        assert_eq!(entries[1].id, first.id);
+        assert!(!entries[1].revertible);
+        assert!(entries[0].revertible);
+    }
+
+    #[test]
+    fn list_recent_reflects_reverted_state_and_survives_a_conversation_reset() {
+        let conn = test_connection();
+        let project_id = make_project(&conn);
+        let task = tasks::create(&conn, project_id, "T".into(), None, None, None, None).unwrap();
+        let before = tasks::get(&conn, &task.id).unwrap();
+        let entry = record(
+            &conn,
+            "archive_task",
+            &json!({ "id": task.id }),
+            "Archived \"T\"".into(),
+            Some(task.id.clone()),
+            Some(&before),
+        )
+        .unwrap();
+
+        // "New conversation" only clears the orchestrator's in-memory
+        // history (see `AIChatOrchestrator::reset`) — it never touches this
+        // table, so a fresh `list_recent` call still sees the entry.
+        let before_revert = list_recent(&conn).unwrap();
+        assert_eq!(before_revert[0].reverted_at, None);
+
+        revert(&conn, entry.id.clone(), false).unwrap();
+
+        let after_revert = list_recent(&conn).unwrap();
+        assert_eq!(after_revert[0].id, entry.id);
+        assert!(after_revert[0].reverted_at.is_some());
     }
 }

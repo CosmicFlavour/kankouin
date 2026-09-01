@@ -524,6 +524,7 @@ mod tests {
                     task_id: Some("task-1".into()),
                     revertible: true,
                     reverted_at: None,
+                    created_at: "2024-01-01T00:00:00Z".into(),
                 }),
             })
         }
