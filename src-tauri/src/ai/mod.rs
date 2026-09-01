@@ -2,11 +2,12 @@ pub mod mock;
 pub mod openwebui;
 pub mod orchestrator;
 pub mod registry;
+pub mod subtask_breakdown;
 
 use serde::{Deserialize, Serialize};
 
 use crate::db::AppState;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::models::{AiActionLogEntry, Settings};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -228,12 +229,71 @@ pub trait ToolExecutor: Send + Sync {
 /// What a full `chat_with_ai` turn produced: the AI's final reply, plus
 /// every mutating tool call it made along the way (possibly across
 /// several rounds of tool calls within the turn — see
-/// `orchestrator::MAX_ITERATIONS`), so the frontend can show an inline
+/// `MAX_TOOL_LOOP_ITERATIONS`), so the frontend can show an inline
 /// "N actions taken" trail under the reply.
 #[derive(Debug, Clone, Serialize)]
 pub struct ChatTurnResult {
     pub reply: String,
     pub actions: Vec<AiActionLogEntry>,
+}
+
+/// Guards against a misbehaving (or malicious) provider that always
+/// requests another tool call — without this, `run_tool_loop` would loop
+/// forever instead of surfacing an error.
+const MAX_TOOL_LOOP_ITERATIONS: usize = 5;
+
+/// Drives `history` through provider ⇄ tool-call round trips until the
+/// provider returns a plain message, appending everything (tool-call
+/// requests, tool results, the final reply) to `history` as it goes.
+/// Shared by `orchestrator::send_message` (a long-lived conversation
+/// history, persisted across turns in a `Mutex`) and
+/// `subtask_breakdown::break_into_subtasks` (a throwaway history built
+/// fresh for one unsupervised action) — both just assemble a starting
+/// `history` differently and hand it to this same loop.
+pub(crate) fn run_tool_loop(
+    provider: &dyn AIProvider,
+    executor: &dyn ToolExecutor,
+    tools: &[ToolDefinition],
+    ctx: &ToolContext,
+    db: &AppState,
+    history: &mut Vec<ChatMessage>,
+) -> AppResult<ChatTurnResult> {
+    let mut actions = Vec::new();
+
+    for _ in 0..MAX_TOOL_LOOP_ITERATIONS {
+        match provider.send(history.as_slice(), tools)? {
+            AIResponse::Message(text) => {
+                history.push(ChatMessage::assistant(text.clone()));
+                return Ok(ChatTurnResult {
+                    reply: text,
+                    actions,
+                });
+            }
+            AIResponse::ToolCalls(calls) => {
+                // The request that made these calls must appear in
+                // history before their results, or an OpenAI-style API
+                // rejects the next request outright (see ChatMessage's
+                // doc comment above).
+                history.push(ChatMessage::assistant_tool_calls(calls.clone()));
+                for call in calls {
+                    let result = executor.execute(&call, ctx, db)?;
+                    history.push(ChatMessage::tool_result(call.id, result.value.to_string()));
+                    if let Some(action) = result.logged_action {
+                        actions.push(action);
+                    }
+                }
+            }
+        }
+    }
+
+    // Tool calls up to this point already ran against the real DB — this
+    // is a "didn't wrap up in time" error, not a "nothing happened" one,
+    // and the message says so.
+    Err(AppError::Invalid(
+        "the AI took too many steps without finishing — actions it already took (if any) \
+         were applied; check the board before retrying"
+            .into(),
+    ))
 }
 
 /// Managed Tauri state for the AI chat feature. Kept separate from

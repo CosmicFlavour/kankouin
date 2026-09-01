@@ -4,13 +4,9 @@ use crate::db::AppState;
 use crate::error::{AppError, AppResult};
 
 use super::{
-    AIProvider, AIResponse, ChatMessage, ChatTurnResult, ToolContext, ToolDefinition, ToolExecutor,
+    run_tool_loop, AIProvider, ChatMessage, ChatTurnResult, ToolContext, ToolDefinition,
+    ToolExecutor,
 };
-
-/// Guards against a misbehaving (or malicious) provider that always
-/// requests another tool call — without this, `send_message` would loop
-/// forever instead of surfacing an error.
-const MAX_ITERATIONS: usize = 5;
 
 /// Describes `ctx` in prose for the model, or `None` when there's nothing
 /// to say (no project/workspace selected at all). Uses the human-readable
@@ -115,46 +111,7 @@ impl AIChatOrchestrator {
 
         history.push(ChatMessage::user(user_message));
 
-        let mut actions = Vec::new();
-
-        for _ in 0..MAX_ITERATIONS {
-            match provider.send(&history, tools)? {
-                AIResponse::Message(text) => {
-                    history.push(ChatMessage::assistant(text.clone()));
-                    return Ok(ChatTurnResult {
-                        reply: text,
-                        actions,
-                    });
-                }
-                AIResponse::ToolCalls(calls) => {
-                    // The request that made these calls must appear in
-                    // history before their results, or an OpenAI-style API
-                    // rejects the next request outright (see ai/mod.rs's
-                    // ChatMessage doc comment).
-                    history.push(ChatMessage::assistant_tool_calls(calls.clone()));
-                    for call in calls {
-                        let result = executor.execute(&call, ctx, db)?;
-                        history.push(ChatMessage::tool_result(call.id, result.value.to_string()));
-                        if let Some(action) = result.logged_action {
-                            actions.push(action);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Tool calls up to this point already ran against the real DB —
-        // this is a "the AI didn't wrap up in time" error, not a "nothing
-        // happened" one, and the message says so. The frontend also treats
-        // *every* chat_with_ai outcome (success or error) as a reason to
-        // refetch, precisely because a failure can still follow committed
-        // mutations (see useAIChat.ts). Those actions are still logged in
-        // the db even though this error path can't return them inline.
-        Err(AppError::Invalid(
-            "the AI assistant took too many steps without finishing — actions it already took \
-             (if any) were applied; check the board before retrying"
-                .into(),
-        ))
+        run_tool_loop(provider, executor, tools, ctx, db, &mut history)
     }
 }
 
@@ -168,7 +125,7 @@ impl Default for AIChatOrchestrator {
 mod tests {
     use super::*;
     use crate::ai::mock::{MockAIProvider, MockToolExecutor};
-    use crate::ai::{ChatRole, ToolCall, ToolExecutionResult};
+    use crate::ai::{AIResponse, ChatRole, ToolCall, ToolExecutionResult};
     use crate::db::{self, DbStatus};
     use crate::models::AiActionLogEntry;
     use serde_json::json;

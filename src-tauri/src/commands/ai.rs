@@ -38,6 +38,28 @@ pub fn chat_with_ai(
     )
 }
 
+/// The task panel's "Break into subtasks" button — a one-shot AI action
+/// scoped to a single task and a single tool, entirely separate from the
+/// conversational assistant (see `ai::subtask_breakdown` for the actual
+/// prompt/restriction logic).
+#[tauri::command]
+pub fn break_task_into_subtasks(
+    app: AppHandle,
+    db: State<AppState>,
+    ai_state: State<AiState>,
+    task_id: String,
+) -> AppResult<ai::ChatTurnResult> {
+    let config_dir = app.path().app_config_dir()?;
+    let settings = settings::read(&config_dir);
+    let provider = ai::resolve_provider(&settings)?;
+    ai::subtask_breakdown::break_into_subtasks(
+        provider.as_ref(),
+        ai_state.executor.as_ref(),
+        db.inner(),
+        task_id,
+    )
+}
+
 /// The built-in default system prompt, for the settings UI to show as
 /// reference/placeholder text next to the user's override field — kept as
 /// a separate command rather than a `Settings` field so it's never
