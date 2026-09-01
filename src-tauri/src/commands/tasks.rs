@@ -564,7 +564,7 @@ fn task_due_soon(task: &Task, now: DateTime<Utc>) -> bool {
     }
 }
 
-fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
+pub(crate) fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
     let now = Utc::now();
     let days_from_monday = now.weekday().num_days_from_monday() as i64;
     let end_of_week = (now.date_naive() + Duration::days(6 - days_from_monday))

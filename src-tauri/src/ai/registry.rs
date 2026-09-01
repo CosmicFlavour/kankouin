@@ -2,7 +2,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::commands::{ai_log, epics, projects, tags, tasks, user_stories};
+use crate::commands::{ai_log, epics, projects, tags, tasks, user_stories, workspaces};
 use crate::db::AppState;
 use crate::error::{AppError, AppResult};
 
@@ -142,6 +142,32 @@ pub fn toolbox() -> Vec<ToolDefinition> {
                 "properties": {
                     "workspace_id": { "type": "string", "description": "Defaults to the workspace currently open in the UI if omitted" }
                 },
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "list_workspaces".into(),
+            description: "Lists every workspace that exists. Call this (then list_projects) to \
+                find a workspace's or project's real ID by name when none is currently open in \
+                the UI — e.g. the user is in the Today, Tags, or Search view. Never invent an ID."
+                .into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
+        ToolDefinition {
+            name: "list_tasks_due_soon".into(),
+            description: "Lists active tasks across every workspace and project that are due \
+                soon: an exact deadline already passed or coming up, or a fuzzy bucket (this \
+                week/month/quarter) close to its end. Use this for questions like \"what's due \
+                this week\" or \"what should I work on next\" — it's not limited to one project, \
+                and each result includes project_id so you can say which project a task is in."
+                .into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {},
                 "required": []
             }),
         },
@@ -487,6 +513,8 @@ impl ToolExecutor for CommandToolExecutor {
                 let a: ListProjectsArgs = parse_args(args)?;
                 unlogged(to_value(projects::list(&conn, a.workspace_id)?))
             }
+            "list_workspaces" => unlogged(to_value(workspaces::list(&conn)?)),
+            "list_tasks_due_soon" => unlogged(to_value(tasks::list_today(&conn)?)),
             "list_tags" => unlogged(to_value(tags::list(&conn)?)),
             "list_epics" => {
                 let a: ListEpicsArgs = parse_args(args)?;
@@ -660,6 +688,84 @@ mod tests {
             .map(|t| t["name"].as_str().unwrap())
             .collect();
         assert_eq!(names, vec!["urgent"]);
+        assert!(result.logged_action.is_none());
+    }
+
+    #[test]
+    fn list_workspaces_returns_every_workspace_and_is_not_logged() {
+        let db = test_db();
+        let conn = db.conn().unwrap();
+        workspaces::create(&conn, "Personal".into(), None, None).unwrap();
+        workspaces::create(&conn, "Work".into(), None, None).unwrap();
+        drop(conn);
+
+        let executor = CommandToolExecutor;
+        let call = ToolCall {
+            id: "1".into(),
+            name: "list_workspaces".into(),
+            arguments: json!({}),
+        };
+
+        let result = executor
+            .execute(&call, &ToolContext::default(), &db)
+            .unwrap();
+        let names: Vec<&str> = result
+            .value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, vec!["Personal", "Work"]);
+        assert!(result.logged_action.is_none());
+    }
+
+    #[test]
+    fn list_tasks_due_soon_spans_every_workspace_without_needing_context() {
+        let db = test_db();
+        let project_a = make_project(&db);
+        let conn = db.conn().unwrap();
+        let workspace_b = workspaces::create(&conn, "Other WS".into(), None, None)
+            .unwrap()
+            .id;
+        let project_b = projects::create(&conn, workspace_b, "Other Proj".into(), None)
+            .unwrap()
+            .id;
+
+        let due_task =
+            tasks::create(&conn, project_a, "Due soon".into(), None, None, None, None).unwrap();
+        tasks::apply_deadline(
+            &conn,
+            due_task.id.clone(),
+            "fuzzy".into(),
+            None,
+            Some("this_week".into()),
+        )
+        .unwrap();
+        tasks::create(&conn, project_b, "Not due".into(), None, None, None, None).unwrap();
+        drop(conn);
+
+        let executor = CommandToolExecutor;
+        let call = ToolCall {
+            id: "1".into(),
+            name: "list_tasks_due_soon".into(),
+            arguments: json!({}),
+        };
+
+        // No project/workspace in context at all — proves this tool is
+        // global and doesn't rely on `merge_context` to work.
+        let result = executor
+            .execute(&call, &ToolContext::default(), &db)
+            .unwrap();
+        let titles: Vec<&str> = result
+            .value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["title"].as_str().unwrap())
+            .collect();
+        assert!(titles.contains(&"Due soon"));
+        assert!(!titles.contains(&"Not due"));
         assert!(result.logged_action.is_none());
     }
 

@@ -18,7 +18,7 @@ fn row_to_workspace(row: &rusqlite::Row) -> rusqlite::Result<Workspace> {
     })
 }
 
-fn list(conn: &Connection) -> AppResult<Vec<Workspace>> {
+pub(crate) fn list(conn: &Connection) -> AppResult<Vec<Workspace>> {
     let mut stmt = conn.prepare(
         "SELECT id, name, color, icon, created_at, updated_at
          FROM workspaces ORDER BY created_at ASC",
