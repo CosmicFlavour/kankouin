@@ -1,6 +1,6 @@
 [package]
 name = "kankouin"
-version = "1.2.0"
+version = "1.3.0"
 description = "Kankouin — personal task manager"
 authors = ["you"]
 edition = "2021"
@@ -49,4 +49,3 @@ tempfile = "3"
 # Generates a throwaway CA + server certificate for the custom-CA TLS
 # round-trip test in ai::openwebui — never used outside `#[cfg(test)]`.
 rcgen = "0.13"
-
