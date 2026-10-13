@@ -22,6 +22,7 @@ import { DeadlineBadge } from "@/components/DeadlineBadge";
 import { TaskDetailDialog } from "@/components/TaskDetailDialog";
 import { TagFilter, type TagFilterValue } from "@/components/TagFilter";
 import { computeDropOrderIndex, previewDragOver } from "@/lib/reorder";
+import { priorityCardClassName } from "@/lib/priority";
 import { cn } from "@/lib/utils";
 
 function SortableTaskRow({
@@ -46,7 +47,8 @@ function SortableTaskRow({
       disabled={!location}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50",
+        "flex items-center justify-between gap-3 rounded-lg border border-l-[3px] bg-card px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50",
+        priorityCardClassName(task.priority),
         isDragging && "opacity-50",
       )}
     >
