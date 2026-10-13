@@ -15,6 +15,16 @@ function PopoverTrigger({
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
 }
 
+// Positions PopoverContent without PopoverTrigger's built-in click-to-toggle
+// behavior — for triggers that need custom open logic (e.g. hover-to-open),
+// where composing onClick with Radix's own toggle would fight the custom
+// logic. See TopBar.tsx's workspace/project switcher.
+function PopoverAnchor({
+  ...props
+}: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
+  return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />
+}
+
 function PopoverContent({
   className,
   align = "start",
@@ -37,4 +47,4 @@ function PopoverContent({
   )
 }
 
-export { Popover, PopoverTrigger, PopoverContent }
+export { Popover, PopoverTrigger, PopoverAnchor, PopoverContent }

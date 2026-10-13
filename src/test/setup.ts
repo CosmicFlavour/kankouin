@@ -69,6 +69,17 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
 
+// jsdom doesn't implement ResizeObserver; Radix's Popper (underlying every
+// Popover) uses it to track the anchor's size for positioning, and silently
+// fails to mount PopoverContent without it.
+if (!window.ResizeObserver) {
+  window.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 afterEach(() => {
   // Vitest isn't run with `globals: true`, so @testing-library/react can't
   // detect a global `afterEach` to auto-register its own cleanup — do it

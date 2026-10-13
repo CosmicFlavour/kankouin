@@ -1,12 +1,22 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BotIcon, ChevronDownIcon } from "lucide-react";
 import type { Workspace } from "@/hooks/useWorkspaces";
 import { ProjectSwitcher } from "@/components/ProjectSwitcher";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+
+// How long to wait after the pointer leaves the switcher (trigger or
+// content) before closing it — long enough to cross the gap between the
+// two without the popover flickering shut, short enough not to feel
+// sticky.
+const HOVER_CLOSE_DELAY_MS = 200;
 
 interface TopBarProps {
   workspaces: Workspace[];
@@ -87,16 +97,58 @@ export function TopBar({
   onToggleAiSidebar,
 }: TopBarProps) {
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    };
+  }, []);
+
+  function cancelScheduledClose() {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  }
+
+  function openSwitcher() {
+    cancelScheduledClose();
+    setSwitcherOpen(true);
+  }
+
+  function scheduleCloseSwitcher() {
+    cancelScheduledClose();
+    closeTimeoutRef.current = setTimeout(
+      () => setSwitcherOpen(false),
+      HOVER_CLOSE_DELAY_MS,
+    );
+  }
 
   const breadcrumbLabel = selectedProjectName
     ? `${selectedWorkspaceName} / ${selectedProjectName}`
     : (selectedWorkspaceName ?? "Select a workspace");
 
-  // The old sidebar only highlighted the tree's selection while the
-  // "workspace" view was active — preserved here so switching to Today or
-  // Search doesn't leave a stale project looking selected in the popover.
-  const gatedWorkspaceId = activeView === "workspace" ? selectedWorkspaceId : null;
-  const gatedProjectId = activeView === "workspace" ? selectedProjectId : null;
+  // Jumps straight back to whatever project/workspace was last selected,
+  // reusing the same handlers the switcher itself uses — picking the same
+  // id again is a no-op except for the activeView flip back to "workspace".
+  function navigateToLastSelection() {
+    if (selectedWorkspaceId && selectedProjectId) {
+      onSelectProject(selectedWorkspaceId, selectedProjectId);
+    } else if (selectedWorkspaceId) {
+      onSelectWorkspace(selectedWorkspaceId);
+    } else {
+      // Nothing to return to yet — click behaves like opening the switcher.
+      // Ensure-open, not toggle: a real mouse click always lands after a
+      // mouseenter already opened it (userEvent and real browsers both fire
+      // mouseenter before click), so toggling would immediately re-close
+      // what hover just opened.
+      openSwitcher();
+      return;
+    }
+    setSwitcherOpen(false);
+  }
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
@@ -106,28 +158,70 @@ export function TopBar({
       <div className="mx-1 h-5 w-px bg-border" />
 
       <Popover open={switcherOpen} onOpenChange={setSwitcherOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
+        <PopoverAnchor asChild>
+          <div
+            ref={anchorRef}
             className={cn(
-              "gap-1 font-normal text-muted-foreground",
-              activeView === "workspace" && "text-foreground",
+              "flex items-center overflow-hidden rounded-md border border-border",
+              activeView === "workspace" && "border-accent-foreground/20 bg-accent",
             )}
+            onMouseEnter={openSwitcher}
+            onMouseLeave={scheduleCloseSwitcher}
           >
-            {breadcrumbLabel}
-            <ChevronDownIcon className="size-3.5" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-auto p-2">
+            <button
+              type="button"
+              onClick={navigateToLastSelection}
+              title={
+                selectedWorkspaceId
+                  ? "Go to the current project"
+                  : "Select a workspace"
+              }
+              className={cn(
+                "px-2.5 py-1 text-sm text-muted-foreground hover:bg-muted",
+                activeView === "workspace" && "text-foreground hover:bg-transparent",
+              )}
+            >
+              {breadcrumbLabel}
+            </button>
+            <button
+              type="button"
+              onClick={openSwitcher}
+              title="Switch workspace or project"
+              className={cn(
+                "border-l border-border px-1.5 py-1 text-muted-foreground hover:bg-muted",
+                activeView === "workspace" && "text-foreground hover:bg-transparent",
+              )}
+            >
+              <ChevronDownIcon className="size-3.5" />
+              <span className="sr-only">Switch workspace or project</span>
+            </button>
+          </div>
+        </PopoverAnchor>
+        <PopoverContent
+          align="start"
+          className="w-auto p-2"
+          onMouseEnter={openSwitcher}
+          onMouseLeave={scheduleCloseSwitcher}
+          onPointerDownOutside={(event) => {
+            // Hovering already opens the content before a click's own
+            // pointerdown fires, so without this, Radix's outside-click
+            // detection sees that pointerdown landing on the trigger (now
+            // "outside" the already-open content) and auto-dismisses right
+            // before the click handler runs. Ignore pointerdowns that
+            // originate from the trigger itself — it already has its own
+            // click handling.
+            if (anchorRef.current?.contains(event.target as Node)) {
+              event.preventDefault();
+            }
+          }}
+        >
           <ProjectSwitcher
             workspaces={workspaces}
             loading={loading}
             error={error}
             onCreateWorkspace={onCreateWorkspace}
-            selectedWorkspaceId={gatedWorkspaceId}
-            selectedProjectId={gatedProjectId}
+            selectedWorkspaceId={selectedWorkspaceId}
+            selectedProjectId={selectedProjectId}
             onSelectWorkspace={onSelectWorkspace}
             onSelectProject={(workspaceId, projectId) => {
               onSelectProject(workspaceId, projectId);
