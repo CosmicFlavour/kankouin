@@ -180,7 +180,7 @@ export function TodayView() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
       <div className="flex items-center gap-3">
         <h2 className="text-lg font-semibold">Today / This Week</h2>
         {tasks.length > 0 && (
@@ -228,7 +228,7 @@ export function TodayView() {
               items={visibleTasks.map((t) => t.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="flex max-w-xl flex-col gap-1">
+              <div className="flex flex-col gap-1">
                 {visibleTasks.map((task) => (
                   <SortableTaskRow
                     key={task.id}

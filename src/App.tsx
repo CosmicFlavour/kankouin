@@ -7,7 +7,7 @@ import { useDatabaseStatus } from "@/hooks/useDatabaseStatus";
 import { useFocusTask } from "@/hooks/useFocusTask";
 import { useFocusReminder } from "@/hooks/useFocusReminder";
 import { useSettings } from "@/hooks/useSettings";
-import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
+import { TopBar } from "@/components/TopBar";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { FocusBanner } from "@/components/FocusBanner";
 import { ProjectPanel } from "@/components/ProjectPanel";
@@ -218,14 +218,18 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
-      <WorkspaceSidebar
+    <div className="flex h-screen flex-col bg-background text-foreground">
+      <TopBar
         workspaces={workspaces}
         loading={loading}
         error={error}
         onCreateWorkspace={createWorkspace}
         selectedWorkspaceId={selectedWorkspaceId}
+        selectedWorkspaceName={selectedWorkspace?.name ?? null}
         selectedProjectId={selectedProjectId}
+        selectedProjectName={
+          allProjects.find((p) => p.id === selectedProjectId)?.name ?? null
+        }
         onSelectWorkspace={(workspaceId) => {
           setActiveView("workspace");
           setSelectedWorkspaceId(workspaceId);
@@ -255,53 +259,60 @@ function App() {
         aiSidebarOpen={aiSidebarOpen}
         onToggleAiSidebar={() => setAiSidebarOpen((open) => !open)}
       />
-      <main className="flex flex-1 flex-col p-6">
-        <FocusBanner
-          session={focus.session}
-          reminderMinutes={reminderMinutes}
-          onClear={focus.clearFocus}
-          onChangeReminderMinutes={setFocusReminderMinutes}
-        />
-        {activeView === "today" && <TodayView />}
-        {activeView === "tags" && <TagsView />}
-        {activeView === "search" && <SearchView />}
-        {activeView === "workspace" && !selectedWorkspace && (
-          <p className="m-auto text-muted-foreground">
-            Select a workspace to get started
-          </p>
-        )}
-        {activeView === "workspace" && selectedWorkspace && !selectedProjectId && (
-          <p className="m-auto text-muted-foreground">
-            Select a project to get started
-          </p>
-        )}
-        {activeView === "workspace" && selectedWorkspace && selectedProjectId && (
-          <ProjectPanel
-            workspace={selectedWorkspace}
-            projectId={selectedProjectId}
-            refreshKey={aiRefreshSignal}
-            onArchived={() => {
-              setSelectedProjectId(null);
-              setProjectsVersion((v) => v + 1);
-            }}
-          />
-        )}
-      </main>
 
-      <AIChatSidebar
-        open={aiSidebarOpen}
-        projectId={activeView === "workspace" ? selectedProjectId : null}
-        workspaceId={activeView === "workspace" ? selectedWorkspaceId : null}
-        projectName={
-          activeView === "workspace"
-            ? allProjects.find((p) => p.id === selectedProjectId)?.name ?? null
-            : null
-        }
-        workspaceName={
-          activeView === "workspace" ? selectedWorkspace?.name ?? null : null
-        }
-        onMutation={() => setAiRefreshSignal((v) => v + 1)}
-      />
+      <div className="flex flex-1">
+        <main className="flex flex-1 flex-col p-6">
+          <FocusBanner
+            session={focus.session}
+            reminderMinutes={reminderMinutes}
+            onClear={focus.clearFocus}
+            onChangeReminderMinutes={setFocusReminderMinutes}
+          />
+          {activeView === "today" && <TodayView />}
+          {activeView === "tags" && <TagsView />}
+          {activeView === "search" && <SearchView />}
+          {activeView === "workspace" && !selectedWorkspace && (
+            <p className="m-auto text-muted-foreground">
+              Select a workspace to get started
+            </p>
+          )}
+          {activeView === "workspace" &&
+            selectedWorkspace &&
+            !selectedProjectId && (
+              <p className="m-auto text-muted-foreground">
+                Select a project to get started
+              </p>
+            )}
+          {activeView === "workspace" &&
+            selectedWorkspace &&
+            selectedProjectId && (
+              <ProjectPanel
+                workspace={selectedWorkspace}
+                projectId={selectedProjectId}
+                refreshKey={aiRefreshSignal}
+                onArchived={() => {
+                  setSelectedProjectId(null);
+                  setProjectsVersion((v) => v + 1);
+                }}
+              />
+            )}
+        </main>
+
+        <AIChatSidebar
+          open={aiSidebarOpen}
+          projectId={activeView === "workspace" ? selectedProjectId : null}
+          workspaceId={activeView === "workspace" ? selectedWorkspaceId : null}
+          projectName={
+            activeView === "workspace"
+              ? allProjects.find((p) => p.id === selectedProjectId)?.name ?? null
+              : null
+          }
+          workspaceName={
+            activeView === "workspace" ? selectedWorkspace?.name ?? null : null
+          }
+          onMutation={() => setAiRefreshSignal((v) => v + 1)}
+        />
+      </div>
 
       <DailyReviewDialog
         open={dailyReviewOpen}

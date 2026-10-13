@@ -112,7 +112,7 @@ export function AIChatSidebar({
     <aside
       style={{ width: open ? width : 0 }}
       className={cn(
-        "flex h-screen shrink-0 overflow-hidden border-l bg-muted/20",
+        "flex h-full shrink-0 overflow-hidden border-l bg-muted/20",
         !isResizing && "transition-[width]",
       )}
     >

@@ -121,7 +121,7 @@ export function TagsView() {
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
       <h2 className="text-lg font-semibold">Tags</h2>
 
       <form onSubmit={handleCreate} className="flex items-center gap-2">
