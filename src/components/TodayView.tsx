@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
   useSensor,
   useSensors,
+  type DragCancelEvent,
   type DragEndEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -19,7 +21,7 @@ import type { TaskSummary } from "@/hooks/useTasks";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
 import { TaskDetailDialog } from "@/components/TaskDetailDialog";
 import { TagFilter, type TagFilterValue } from "@/components/TagFilter";
-import { resolveDropOrderIndex } from "@/lib/reorder";
+import { computeDropOrderIndex } from "@/lib/reorder";
 import { cn } from "@/lib/utils";
 
 function SortableTaskRow({
@@ -76,7 +78,8 @@ function SortableTaskRow({
 }
 
 export function TodayView() {
-  const { tasks, loading, error, refresh, reorderTask } = useTasksToday();
+  const { tasks, loading, error, refresh, reorderTask, previewReorder } =
+    useTasksToday();
   const { directory, loading: directoryLoading, error: directoryError } =
     useProjectDirectory();
   const {
@@ -105,20 +108,78 @@ export function TodayView() {
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
-  async function handleDragEnd(event: DragEndEvent) {
+  // Snapshot of `tasks` as the drag started, restored verbatim if the
+  // drag is cancelled or dropped outside any valid target — onDragOver
+  // mutates local order live (see below), so without this a cancelled
+  // drag would leave the optimistic reorder stuck in place.
+  const dragSnapshotRef = useRef<TaskSummary[] | null>(null);
+
+  function handleDragStart() {
+    dragSnapshotRef.current = tasks;
+  }
+
+  // Reorders local state live as the drag crosses over rows, so rows
+  // animate smoothly into place during the drag instead of jumping once
+  // the backend call resolves on drop.
+  function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over) return;
 
     const taskId = String(active.id);
     const overId = String(over.id);
-    const orderIndex = resolveDropOrderIndex(visibleTasks, taskId, overId);
+    if (taskId === overId) return;
+
+    previewReorder((prev) => {
+      const task = prev.find((t) => t.id === taskId);
+      if (!task) return prev;
+
+      const without = prev.filter((t) => t.id !== taskId);
+      let insertAt = without.findIndex((t) => t.id === overId);
+      if (insertAt === -1) insertAt = without.length;
+
+      const next = [...without];
+      next.splice(insertAt, 0, task);
+      return next;
+    });
+  }
+
+  function restoreDragSnapshot() {
+    if (dragSnapshotRef.current) {
+      const snapshot = dragSnapshotRef.current;
+      previewReorder(() => snapshot);
+    }
+    dragSnapshotRef.current = null;
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) {
+      restoreDragSnapshot();
+      return;
+    }
+
+    const taskId = String(active.id);
+    dragSnapshotRef.current = null;
+
+    // onDragOver has already put the task at its final position locally —
+    // just read that position back out and persist it.
+    const siblings = tasks.filter((t) => t.id !== taskId);
+    const orderIndex = computeDropOrderIndex(
+      siblings,
+      tasks.findIndex((t) => t.id === taskId),
+    );
 
     try {
       await reorderTask(taskId, orderIndex);
       setReorderError(null);
     } catch (err) {
       setReorderError(String(err));
+      await refresh();
     }
+  }
+
+  function handleDragCancel(_event: DragCancelEvent) {
+    restoreDragSnapshot();
   }
 
   return (
@@ -159,7 +220,13 @@ export function TodayView() {
               No tasks match the selected tags.
             </p>
           )}
-          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
             <SortableContext
               items={visibleTasks.map((t) => t.id)}
               strategy={verticalListSortingStrategy}

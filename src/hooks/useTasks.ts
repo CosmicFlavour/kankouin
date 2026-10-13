@@ -117,6 +117,15 @@ export function useTasks(projectId: string | null, refreshKey: unknown = null) {
     );
   }
 
+  // Reorders local state only, no backend call — used to animate cards
+  // into place live as a drag crosses over them (see TaskBoard's
+  // onDragOver). The drag's real order_index (and state, if it crossed
+  // columns) is persisted once on drop via moveTask/reorderTask, which by
+  // then is just confirming the position already shown on screen.
+  function previewReorder(updater: (prev: TaskSummary[]) => TaskSummary[]) {
+    setTasks(updater);
+  }
+
   // `orderIndex` is the midpoint between the task's new neighbors (or an
   // extrapolated value past the first/last task) — computed by the caller,
   // since only it knows the drop position. Re-sorts local state afterward
@@ -212,6 +221,7 @@ export function useTasks(projectId: string | null, refreshKey: unknown = null) {
     createTask,
     moveTask,
     reorderTask,
+    previewReorder,
     updateTask,
     setDeadline,
     setTaskTags,

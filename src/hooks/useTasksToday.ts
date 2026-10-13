@@ -38,6 +38,12 @@ export function useTasksToday() {
     return result;
   }, []);
 
+  // See useTasks.ts's previewReorder — local-only reorder for live drag
+  // animation, no backend call.
+  function previewReorder(updater: (prev: TaskSummary[]) => TaskSummary[]) {
+    setTasks(updater);
+  }
+
   // See useTasks.ts's reorderTask — same backend command and shared
   // order_index, just against this hook's own task list/state.
   async function reorderTask(taskId: string, orderIndex: number) {
@@ -52,5 +58,5 @@ export function useTasksToday() {
     );
   }
 
-  return { tasks, loading, error, refresh, reorderTask };
+  return { tasks, loading, error, refresh, reorderTask, previewReorder };
 }
