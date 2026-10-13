@@ -21,7 +21,7 @@ import type { TaskSummary } from "@/hooks/useTasks";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
 import { TaskDetailDialog } from "@/components/TaskDetailDialog";
 import { TagFilter, type TagFilterValue } from "@/components/TagFilter";
-import { computeDropOrderIndex } from "@/lib/reorder";
+import { computeDropOrderIndex, previewDragOver } from "@/lib/reorder";
 import { cn } from "@/lib/utils";
 
 function SortableTaskRow({
@@ -129,18 +129,13 @@ export function TodayView() {
     const overId = String(over.id);
     if (taskId === overId) return;
 
-    previewReorder((prev) => {
-      const task = prev.find((t) => t.id === taskId);
-      if (!task) return prev;
-
-      const without = prev.filter((t) => t.id !== taskId);
-      let insertAt = without.findIndex((t) => t.id === overId);
-      if (insertAt === -1) insertAt = without.length;
-
-      const next = [...without];
-      next.splice(insertAt, 0, task);
-      return next;
-    });
+    previewReorder((prev) =>
+      previewDragOver(prev, taskId, overId, {
+        isContainer: () => false,
+        containerOf: () => "",
+        withContainer: (t) => t,
+      }),
+    );
   }
 
   function restoreDragSnapshot() {

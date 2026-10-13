@@ -14,7 +14,7 @@ import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import { useArchivedTasks } from "@/hooks/useArchivedTasks";
 import { useTags } from "@/hooks/useTags";
 import { TASK_STATES } from "@/lib/taskState";
-import { computeDropOrderIndex } from "@/lib/reorder";
+import { computeDropOrderIndex, previewDragOver } from "@/lib/reorder";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
@@ -282,34 +282,13 @@ export function TaskBoard({
     const overId = String(over.id);
     if (taskId === overId) return;
 
-    previewReorder((prev) => {
-      const task = prev.find((t) => t.id === taskId);
-      if (!task) return prev;
-
-      const droppedOnColumn = TASK_STATES.some((c) => c.state === overId);
-      const targetState = droppedOnColumn
-        ? overId
-        : prev.find((t) => t.id === overId)?.state ?? task.state;
-
-      const without = prev.filter((t) => t.id !== taskId);
-      let insertAt: number;
-      if (droppedOnColumn) {
-        // Append after the last task currently in that column.
-        const lastIdx = without.map((t) => t.state).lastIndexOf(targetState);
-        insertAt = lastIdx === -1 ? without.length : lastIdx + 1;
-      } else {
-        insertAt = without.findIndex((t) => t.id === overId);
-        if (insertAt === -1) insertAt = without.length;
-      }
-
-      const next = [...without];
-      next.splice(
-        insertAt,
-        0,
-        targetState === task.state ? task : { ...task, state: targetState },
-      );
-      return next;
-    });
+    previewReorder((prev) =>
+      previewDragOver(prev, taskId, overId, {
+        isContainer: (id) => TASK_STATES.some((c) => c.state === id),
+        containerOf: (t) => t.state,
+        withContainer: (t, state) => ({ ...t, state }),
+      }),
+    );
   }
 
   function restoreDragSnapshot() {
