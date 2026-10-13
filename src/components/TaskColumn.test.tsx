@@ -27,12 +27,13 @@ function renderColumn(tasks = [makeTask({ id: "t1", title: "Write draft" })]) {
 describe("TaskColumn", () => {
   it("shows the column label and task count", () => {
     renderColumn([makeTask({ id: "t1" }), makeTask({ id: "t2" })]);
-    expect(screen.getByText("Todo (2)")).toBeInTheDocument();
+    expect(screen.getByText("Todo")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
   });
 
   it("shows a zero count with no cards when empty", () => {
     renderColumn([]);
-    expect(screen.getByText("Todo (0)")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
     expect(screen.queryByText("Write draft")).not.toBeInTheDocument();
   });
 

@@ -10,9 +10,9 @@ describe("priorityCardClassName", () => {
     expect(priorityCardClassName("medium")).toContain("amber");
   });
 
-  it("returns the muted palette for any other priority", () => {
-    expect(priorityCardClassName("low")).toBe("bg-muted border-border");
-    expect(priorityCardClassName("unknown")).toBe("bg-muted border-border");
+  it("returns a transparent accent for any other priority", () => {
+    expect(priorityCardClassName("low")).toBe("border-l-transparent");
+    expect(priorityCardClassName("unknown")).toBe("border-l-transparent");
   });
 });
 

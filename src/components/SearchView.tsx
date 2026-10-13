@@ -5,6 +5,8 @@ import { fuzzySearch } from "@/lib/fuzzyMatch";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
 import { TaskDetailDialog } from "@/components/TaskDetailDialog";
 import { Input } from "@/components/ui/input";
+import { priorityCardClassName } from "@/lib/priority";
+import { cn } from "@/lib/utils";
 
 export function SearchView() {
   const { tasks, loading, error, refresh } = useAllTasks();
@@ -17,7 +19,7 @@ export function SearchView() {
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
       <h2 className="text-lg font-semibold">Search</h2>
 
       <Input
@@ -25,7 +27,6 @@ export function SearchView() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search tasks by title..."
-        className="max-w-xl"
       />
 
       {(loading || directoryLoading) && (
@@ -49,7 +50,7 @@ export function SearchView() {
             </p>
           )}
           {results.length > 0 && (
-            <div className="flex max-w-xl flex-col gap-1">
+            <div className="flex flex-col gap-1">
               {results.map((task) => {
                 const location = directory.get(task.project_id);
                 return (
@@ -58,7 +59,10 @@ export function SearchView() {
                     type="button"
                     onClick={() => setSelectedTaskId(task.id)}
                     disabled={!location}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50"
+                    className={cn(
+                      "flex items-center justify-between gap-3 rounded-lg border border-l-[3px] bg-card px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50",
+                      priorityCardClassName(task.priority),
+                    )}
                   >
                     <span className="flex flex-col">
                       <span>{task.title}</span>

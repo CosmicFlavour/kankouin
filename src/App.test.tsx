@@ -235,7 +235,10 @@ describe("App AI assistant context scoping", () => {
     render(<App />);
 
     await screen.findByText("Select a workspace to get started");
-    await user.click(screen.getByRole("button", { name: "Personal" }));
+    // Workspace/project selection now lives behind the top bar's switcher
+    // popover instead of an always-visible sidebar tree.
+    await user.click(screen.getByRole("button", { name: "Select a workspace" }));
+    await user.click(await screen.findByRole("button", { name: "Personal" }));
     await user.click(
       await screen.findByRole("button", { name: "Website relaunch" }),
     );

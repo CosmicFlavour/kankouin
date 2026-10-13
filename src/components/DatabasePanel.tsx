@@ -59,7 +59,7 @@ export function DatabasePanel() {
   if (!status || status.status !== "ok") return null;
 
   return (
-    <div className="mt-3 border-b border-border pb-3">
+    <div>
       <div className="flex items-center gap-1">
         <p
           className="min-w-0 flex-1 truncate text-xs text-muted-foreground"

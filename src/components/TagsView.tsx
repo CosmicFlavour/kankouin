@@ -64,7 +64,7 @@ function TagRow({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
+    <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
       <span
         className="h-3 w-3 shrink-0 rounded-full"
         style={{ backgroundColor: tag.color }}
@@ -121,7 +121,7 @@ export function TagsView() {
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-4">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
       <h2 className="text-lg font-semibold">Tags</h2>
 
       <form onSubmit={handleCreate} className="flex items-center gap-2">

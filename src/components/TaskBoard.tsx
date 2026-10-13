@@ -455,6 +455,8 @@ export function TaskBoard({
                 epics={epics}
                 userStories={userStories}
                 onSelectTask={setSelectedTaskId}
+                dotClassName={column.dotClassName}
+                columnClassName={column.columnClassName}
               />
             ))}
           </div>

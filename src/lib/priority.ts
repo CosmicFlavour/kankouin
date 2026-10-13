@@ -1,11 +1,15 @@
+// Left-accent border color for a task card — the card's own background and
+// border stay neutral (set by the caller); priority shows as a thin colored
+// bar down the left edge instead of tinting the whole card, so a board full
+// of high-priority tasks doesn't read as a wall of red.
 export function priorityCardClassName(priority: string): string {
   switch (priority) {
     case "high":
-      return "bg-red-50 border-red-200 dark:bg-red-900/40 dark:border-red-700";
+      return "border-l-red-500 dark:border-l-red-500";
     case "medium":
-      return "bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:border-amber-600";
+      return "border-l-amber-500 dark:border-l-amber-400";
     default:
-      return "bg-muted border-border";
+      return "border-l-transparent";
   }
 }
 
