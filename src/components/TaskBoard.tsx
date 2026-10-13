@@ -11,6 +11,7 @@ import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import { useArchivedTasks } from "@/hooks/useArchivedTasks";
 import { useTags } from "@/hooks/useTags";
 import { TASK_STATES } from "@/lib/taskState";
+import { computeDropOrderIndex } from "@/lib/reorder";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
@@ -122,6 +123,7 @@ export function TaskBoard({
     refresh: refreshTasks,
     createTask,
     moveTask,
+    reorderTask,
     archiveTask,
     deleteTask,
   } = tasksApi;
@@ -255,12 +257,33 @@ export function TaskBoard({
     if (!over) return;
 
     const taskId = String(active.id);
-    const newState = String(over.id);
     const task = tasks.find((t) => t.id === taskId);
-    if (!task || task.state === newState) return;
+    if (!task) return;
+
+    const overId = String(over.id);
+    // Dropped directly on a column (empty space below its cards) vs. on
+    // another card — the latter means the drop target's own column.
+    const droppedOnColumn = TASK_STATES.some((c) => c.state === overId);
+    const targetState = droppedOnColumn
+      ? overId
+      : tasks.find((t) => t.id === overId)?.state ?? task.state;
+
+    // Already-sorted (tasks comes pre-sorted by order_index), minus the
+    // dragged task itself, so indices line up with the drop target.
+    const siblings = tasks.filter(
+      (t) => t.state === targetState && t.id !== taskId,
+    );
+    const insertAtIndex = droppedOnColumn
+      ? siblings.length
+      : Math.max(0, siblings.findIndex((t) => t.id === overId));
+
+    const orderIndex = computeDropOrderIndex(siblings, insertAtIndex);
 
     try {
-      await moveTask(taskId, newState);
+      if (targetState !== task.state) {
+        await moveTask(taskId, targetState);
+      }
+      await reorderTask(taskId, orderIndex);
       setMoveError(null);
     } catch (err) {
       setMoveError(String(err));

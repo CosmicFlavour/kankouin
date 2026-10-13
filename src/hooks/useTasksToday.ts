@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { TaskSummary } from "@/hooks/useTasks";
+import type { Task, TaskSummary } from "@/hooks/useTasks";
 
 export function useTasksToday() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
@@ -38,5 +38,19 @@ export function useTasksToday() {
     return result;
   }, []);
 
-  return { tasks, loading, error, refresh };
+  // See useTasks.ts's reorderTask — same backend command and shared
+  // order_index, just against this hook's own task list/state.
+  async function reorderTask(taskId: string, orderIndex: number) {
+    const updated = await invoke<Task>("reorder_task", {
+      id: taskId,
+      orderIndex,
+    });
+    setTasks((prev) =>
+      prev
+        .map((t) => (t.id === taskId ? { ...t, ...updated } : t))
+        .sort((a, b) => a.order_index - b.order_index),
+    );
+  }
+
+  return { tasks, loading, error, refresh, reorderTask };
 }

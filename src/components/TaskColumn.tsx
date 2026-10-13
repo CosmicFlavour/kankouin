@@ -1,4 +1,5 @@
 import { useDroppable } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
@@ -33,17 +34,22 @@ export function TaskColumn({
       <h3 className="text-sm font-medium text-muted-foreground">
         {label} ({tasks.length})
       </h3>
-      <div className="flex flex-col gap-1">
-        {tasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            epics={epics}
-            userStories={userStories}
-            onSelect={() => onSelectTask(task.id)}
-          />
-        ))}
-      </div>
+      <SortableContext
+        items={tasks.map((t) => t.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="flex flex-col gap-1">
+          {tasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              epics={epics}
+              userStories={userStories}
+              onSelect={() => onSelectTask(task.id)}
+            />
+          ))}
+        </div>
+      </SortableContext>
     </div>
   );
 }

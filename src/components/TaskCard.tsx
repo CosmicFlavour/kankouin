@@ -1,4 +1,5 @@
-import { useDraggable } from "@dnd-kit/core";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { TaskSummary } from "@/hooks/useTasks";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
@@ -18,19 +19,15 @@ export function TaskCard({
   userStories: UserStory[];
   onSelect: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id: task.id, disabled: task.archived });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: task.id, disabled: task.archived });
 
   return (
     <div
       ref={setNodeRef}
       {...(task.archived ? {} : { ...listeners, ...attributes })}
       onClick={onSelect}
-      style={
-        transform
-          ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-          : undefined
-      }
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "flex flex-col gap-1 rounded-md border px-3 py-2 text-sm",
         task.archived
