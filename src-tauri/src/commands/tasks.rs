@@ -11,12 +11,12 @@ use crate::models::{Subtask, Tag, Task, TaskDetail, TaskSummary};
 
 const TASK_COLUMNS: &str = "id, project_id, epic_id, user_story_id, title, description, state, \
      priority, deadline_type, exact_date, fuzzy_bucket, bucket_period, state_since, \
-     archived, created_at, updated_at";
+     archived, created_at, updated_at, order_index";
 
 const TASK_COLUMNS_DEP_ALIASED: &str = "dep.id, dep.project_id, dep.epic_id, dep.user_story_id, \
      dep.title, dep.description, dep.state, dep.priority, dep.deadline_type, dep.exact_date, \
      dep.fuzzy_bucket, dep.bucket_period, dep.state_since, dep.archived, dep.created_at, \
-     dep.updated_at";
+     dep.updated_at, dep.order_index";
 
 const VALID_STATES: [&str; 4] = ["todo", "doing", "under_review", "done"];
 const VALID_PRIORITIES: [&str; 3] = ["low", "medium", "high"];
@@ -57,6 +57,7 @@ pub(crate) fn row_to_task(row: &rusqlite::Row) -> rusqlite::Result<Task> {
         archived: row.get::<_, i64>("archived")? != 0,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
+        order_index: row.get("order_index")?,
     })
 }
 
@@ -182,7 +183,7 @@ fn fetch_blocked_task_ids(conn: &Connection, task_ids: &[String]) -> AppResult<H
 
 pub(crate) fn list(conn: &Connection, project_id: String) -> AppResult<Vec<TaskSummary>> {
     let sql = format!(
-        "SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = ?1 AND archived = 0 ORDER BY created_at ASC"
+        "SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = ?1 AND archived = 0 ORDER BY order_index ASC"
     );
     let mut stmt = conn.prepare(&sql)?;
     let tasks = stmt
@@ -291,9 +292,18 @@ pub(crate) fn create(
     let fuzzy_bucket = "someday";
     let bucket_period = crate::dates::current_bucket_period(fuzzy_bucket, Utc::now());
 
+    // New tasks start past the end of every list they could appear in,
+    // rather than at a fixed 0 that would tie with (or jump ahead of)
+    // whatever's already been manually ordered there.
+    let order_index: f64 = conn.query_row(
+        "SELECT COALESCE(MAX(order_index), -1) + 1 FROM tasks",
+        [],
+        |r| r.get(0),
+    )?;
+
     conn.execute(
-        "INSERT INTO tasks (id, project_id, epic_id, user_story_id, title, description, state, priority, deadline_type, fuzzy_bucket, bucket_period, state_since, archived, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', ?7, ?8, ?9, ?10, ?11, 0, ?11, ?11)",
+        "INSERT INTO tasks (id, project_id, epic_id, user_story_id, title, description, state, priority, deadline_type, fuzzy_bucket, bucket_period, state_since, archived, created_at, updated_at, order_index)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'todo', ?7, ?8, ?9, ?10, ?11, 0, ?11, ?11, ?12)",
         params![
             id,
             project_id,
@@ -305,7 +315,8 @@ pub(crate) fn create(
             deadline_type,
             fuzzy_bucket,
             bucket_period,
-            now
+            now,
+            order_index
         ],
     )?;
     Ok(Task {
@@ -325,6 +336,7 @@ pub(crate) fn create(
         archived: false,
         created_at: now.clone(),
         updated_at: now,
+        order_index,
     })
 }
 
@@ -360,6 +372,23 @@ pub(crate) fn update(
             user_story_id,
             now
         ],
+    )?;
+    if changed == 0 {
+        return Err(AppError::NotFound);
+    }
+    get_task_row(conn, &id)
+}
+
+/// Repositions a task within whichever drag-and-drop list it was just
+/// dropped in (a Kanban column or the Today/This Week list). `order_index`
+/// is shared across every view — see [0005_task_order.sql](../../migrations/0005_task_order.sql)
+/// — so the caller computes it as the midpoint between the task's new
+/// neighbors (or an extrapolated value past the first/last task).
+pub(crate) fn reorder(conn: &Connection, id: String, order_index: f64) -> AppResult<Task> {
+    let now = Utc::now().to_rfc3339();
+    let changed = conn.execute(
+        "UPDATE tasks SET order_index = ?2, updated_at = ?3 WHERE id = ?1",
+        params![id, order_index, now],
     )?;
     if changed == 0 {
         return Err(AppError::NotFound);
@@ -587,7 +616,7 @@ pub(crate) fn list_today(conn: &Connection) -> AppResult<Vec<TaskSummary>> {
              (deadline_type = 'exact' AND exact_date <= ?1)
              OR (deadline_type = 'fuzzy' AND fuzzy_bucket IN ('this_week', 'this_month', 'this_quarter'))
            )
-         ORDER BY exact_date ASC"
+         ORDER BY order_index ASC"
     );
     let mut stmt = conn.prepare(&sql)?;
     let mut tasks = stmt
@@ -709,6 +738,12 @@ pub fn update_task(
 pub fn update_task_state(state: State<AppState>, id: String, new_state: String) -> AppResult<Task> {
     let mut conn = state.conn()?;
     update_state(&mut conn, id, new_state)
+}
+
+#[tauri::command]
+pub fn reorder_task(state: State<AppState>, id: String, order_index: f64) -> AppResult<Task> {
+    let conn = state.conn()?;
+    reorder(&conn, id, order_index)
 }
 
 #[tauri::command]
@@ -1410,6 +1445,7 @@ mod tests {
             archived: false,
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: "2026-01-01T00:00:00Z".into(),
+            order_index: 0.0,
         };
         assert!(task_due_soon(&task, now));
     }
@@ -1432,6 +1468,7 @@ mod tests {
             archived: false,
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: "2026-01-01T00:00:00Z".into(),
+            order_index: 0.0,
         }
     }
 
