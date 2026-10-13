@@ -1,6 +1,6 @@
 [package]
 name = "kankouin"
-version = "1.3.0"
+version = "1.4.0"
 description = "Kankouin — personal task manager"
 authors = ["you"]
 edition = "2021"
