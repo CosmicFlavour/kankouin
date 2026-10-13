@@ -19,7 +19,7 @@ import type { TaskSummary } from "@/hooks/useTasks";
 import { DeadlineBadge } from "@/components/DeadlineBadge";
 import { TaskDetailDialog } from "@/components/TaskDetailDialog";
 import { TagFilter, type TagFilterValue } from "@/components/TagFilter";
-import { computeDropOrderIndex } from "@/lib/reorder";
+import { resolveDropOrderIndex } from "@/lib/reorder";
 import { cn } from "@/lib/utils";
 
 function SortableTaskRow({
@@ -111,12 +111,7 @@ export function TodayView() {
 
     const taskId = String(active.id);
     const overId = String(over.id);
-    const siblings = visibleTasks.filter((t) => t.id !== taskId);
-    const insertAtIndex = Math.max(
-      0,
-      siblings.findIndex((t) => t.id === overId),
-    );
-    const orderIndex = computeDropOrderIndex(siblings, insertAtIndex);
+    const orderIndex = resolveDropOrderIndex(visibleTasks, taskId, overId);
 
     try {
       await reorderTask(taskId, orderIndex);

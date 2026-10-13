@@ -11,7 +11,7 @@ import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import { useArchivedTasks } from "@/hooks/useArchivedTasks";
 import { useTags } from "@/hooks/useTags";
 import { TASK_STATES } from "@/lib/taskState";
-import { computeDropOrderIndex } from "@/lib/reorder";
+import { resolveDropOrderIndex } from "@/lib/reorder";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
@@ -268,16 +268,13 @@ export function TaskBoard({
       ? overId
       : tasks.find((t) => t.id === overId)?.state ?? task.state;
 
-    // Already-sorted (tasks comes pre-sorted by order_index), minus the
-    // dragged task itself, so indices line up with the drop target.
-    const siblings = tasks.filter(
-      (t) => t.state === targetState && t.id !== taskId,
+    // Already-sorted (tasks comes pre-sorted by order_index).
+    const columnTasks = tasks.filter((t) => t.state === targetState);
+    const orderIndex = resolveDropOrderIndex(
+      columnTasks,
+      taskId,
+      droppedOnColumn ? null : overId,
     );
-    const insertAtIndex = droppedOnColumn
-      ? siblings.length
-      : Math.max(0, siblings.findIndex((t) => t.id === overId));
-
-    const orderIndex = computeDropOrderIndex(siblings, insertAtIndex);
 
     try {
       if (targetState !== task.state) {
