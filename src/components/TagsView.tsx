@@ -64,7 +64,7 @@ function TagRow({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2">
+    <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
       <span
         className="h-3 w-3 shrink-0 rounded-full"
         style={{ backgroundColor: tag.color }}
