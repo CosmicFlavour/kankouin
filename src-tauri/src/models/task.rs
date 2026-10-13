@@ -20,6 +20,7 @@ pub struct Task {
     pub archived: bool,
     pub created_at: String,
     pub updated_at: String,
+    pub order_index: f64,
 }
 
 /// Board/list-view shape: a `Task` plus its tags and whether it's currently

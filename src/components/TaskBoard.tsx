@@ -1,16 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   PointerSensor,
   useSensor,
   useSensors,
+  type DragCancelEvent,
   type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import { PlusIcon } from "lucide-react";
 import { useTasks, type TaskSummary } from "@/hooks/useTasks";
 import { useArchivedTasks } from "@/hooks/useArchivedTasks";
 import { useTags } from "@/hooks/useTags";
 import { TASK_STATES } from "@/lib/taskState";
+import { computeDropOrderIndex, previewDragOver } from "@/lib/reorder";
 import type { Epic } from "@/hooks/useEpics";
 import type { UserStory } from "@/hooks/useUserStories";
 import { Button } from "@/components/ui/button";
@@ -122,6 +126,8 @@ export function TaskBoard({
     refresh: refreshTasks,
     createTask,
     moveTask,
+    reorderTask,
+    previewReorder,
     archiveTask,
     deleteTask,
   } = tasksApi;
@@ -250,21 +256,87 @@ export function TaskBoard({
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
 
-  async function handleDragEnd(event: DragEndEvent) {
+  // Snapshot of `allTasks` as the drag started, restored verbatim if the
+  // drag is cancelled or dropped outside any valid target — onDragOver
+  // mutates local order live (see below), so without this a cancelled
+  // drag would leave the optimistic reorder stuck in place.
+  const dragSnapshotRef = useRef<TaskSummary[] | null>(null);
+  const dragOriginalStateRef = useRef<string | null>(null);
+
+  function handleDragStart(event: DragStartEvent) {
+    const taskId = String(event.active.id);
+    dragSnapshotRef.current = allTasks;
+    dragOriginalStateRef.current =
+      allTasks.find((t) => t.id === taskId)?.state ?? null;
+  }
+
+  // Reorders local state live as the drag crosses over cards/columns, so
+  // cards animate smoothly into place during the drag instead of jumping
+  // once the backend call resolves on drop (see previewReorder's comment
+  // in useTasks.ts).
+  function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
     if (!over) return;
 
     const taskId = String(active.id);
-    const newState = String(over.id);
-    const task = tasks.find((t) => t.id === taskId);
-    if (!task || task.state === newState) return;
+    const overId = String(over.id);
+    if (taskId === overId) return;
+
+    previewReorder((prev) =>
+      previewDragOver(prev, taskId, overId, {
+        isContainer: (id) => TASK_STATES.some((c) => c.state === id),
+        containerOf: (t) => t.state,
+        withContainer: (t, state) => ({ ...t, state }),
+      }),
+    );
+  }
+
+  function restoreDragSnapshot() {
+    if (dragSnapshotRef.current) {
+      const snapshot = dragSnapshotRef.current;
+      previewReorder(() => snapshot);
+    }
+    dragSnapshotRef.current = null;
+    dragOriginalStateRef.current = null;
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) {
+      restoreDragSnapshot();
+      return;
+    }
+
+    const taskId = String(active.id);
+    const task = allTasks.find((t) => t.id === taskId);
+    const originalState = dragOriginalStateRef.current;
+    dragSnapshotRef.current = null;
+    dragOriginalStateRef.current = null;
+    if (!task) return;
+
+    // onDragOver has already put the task at its final position locally —
+    // just read that position back out and persist it.
+    const columnTasks = allTasks.filter((t) => t.state === task.state);
+    const siblings = columnTasks.filter((t) => t.id !== taskId);
+    const orderIndex = computeDropOrderIndex(
+      siblings,
+      columnTasks.findIndex((t) => t.id === taskId),
+    );
 
     try {
-      await moveTask(taskId, newState);
+      if (originalState !== null && originalState !== task.state) {
+        await moveTask(taskId, task.state);
+      }
+      await reorderTask(taskId, orderIndex);
       setMoveError(null);
     } catch (err) {
       setMoveError(String(err));
+      await refreshTasks();
     }
+  }
+
+  function handleDragCancel(_event: DragCancelEvent) {
+    restoreDragSnapshot();
   }
 
   return (
@@ -366,7 +438,13 @@ export function TaskBoard({
       {moveError && <p className="text-sm text-destructive">{moveError}</p>}
 
       {!loading && !error && (
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
           <div className="flex gap-4">
             {TASK_STATES.map((column) => (
               <TaskColumn

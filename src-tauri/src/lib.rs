@@ -62,6 +62,7 @@ pub fn run() {
             commands::tasks::create_task,
             commands::tasks::update_task,
             commands::tasks::update_task_state,
+            commands::tasks::reorder_task,
             commands::tasks::set_deadline,
             commands::tasks::set_task_parent,
             commands::tasks::archive_task,

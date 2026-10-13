@@ -52,6 +52,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("../../migrations/0002_make_tags_global.sql")),
         M::up(include_str!("../../migrations/0003_ai_action_log.sql")),
         M::up(include_str!("../../migrations/0004_focus_session.sql")),
+        M::up(include_str!("../../migrations/0005_task_order.sql")),
     ])
 }
 
