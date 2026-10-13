@@ -29,7 +29,7 @@ export function TaskCard({
       onClick={onSelect}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex flex-col gap-1 rounded-md border px-3 py-2 text-sm",
+        "flex flex-col gap-1 rounded-lg border border-l-[3px] bg-card px-3 py-2 text-sm",
         task.archived
           ? "cursor-pointer opacity-50"
           : "cursor-grab active:cursor-grabbing",
